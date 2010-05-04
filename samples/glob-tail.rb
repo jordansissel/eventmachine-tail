@@ -38,9 +38,11 @@ def main(args)
   end
 
   EventMachine.run do
-    handler = EventMachine::FileGlobWatchTail.new(Reader)
+    #handler = EventMachine::FileGlobWatchTail.new(Reader)
     args.each do |path|
-      EventMachine::FileGlobWatch.new(path, handler)
+      EventMachine::FileGlobWatchTail.new(path, Reader)
+      #EventMachine::FileGlobWatch.new(path, handler)
+      #EventMachine::file_tail(path, handler)
     end
   end
 end # def main

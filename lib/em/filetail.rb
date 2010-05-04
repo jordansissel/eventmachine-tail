@@ -30,16 +30,25 @@ class EventMachine::FileTail
 
   attr_reader :path
   
+  # Tail a file
+  #
+  # path is a string file path
+  # startpos is an offset to start tailing the file at. If -1, start at end of 
+  # file.
+  #
   public
   def initialize(path, startpos=-1)
     @path = path
     @logger = Logger.new(STDOUT)
     @logger.level = Logger::WARN
 
-    #@need_scheduling = true
-    open
-
     @fstat = File.stat(@path)
+
+    if @fstat.directory?
+      raise Errno::EISDIR.new(@path)
+    end
+
+    open
     if (startpos == -1)
       @file.sysseek(0, IO::SEEK_END)
     end
@@ -47,6 +56,10 @@ class EventMachine::FileTail
     watch
   end # def initialize
 
+  # notify is invoked by EventMachine when the file you are tailing
+  # has been modified or otherwise needs to be acted on.
+  #
+  # You won't normally call this method.
   public
   def notify(status)
     @logger.debug("#{status} on #{path}")
