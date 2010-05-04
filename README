@@ -1,0 +1,4 @@
+= EventMachine file tail and glob watching
+
+See the samples/ directory for usage.
+
