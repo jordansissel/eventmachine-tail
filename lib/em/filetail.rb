@@ -49,11 +49,13 @@ class EventMachine::FileTail
     end
 
     open
+    watch
     if (startpos == -1)
       @file.sysseek(0, IO::SEEK_END)
+    else
+      @file.sysseek(startpos, IO::SEEK_SET)
+      schedule_next_read
     end
-
-    watch
   end # def initialize
 
   # notify is invoked by EventMachine when the file you are tailing

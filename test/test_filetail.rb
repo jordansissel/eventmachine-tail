@@ -9,8 +9,8 @@ DATA = (1000..1010).to_a.collect { |i| i.to_s }
 SLEEPMAX = 2
 
 class Reader < EventMachine::FileTail
-  def initialize(path, testobj)
-    super(path)
+  def initialize(path, startpos=-1, testobj=nil)
+    super(path, startpos)
     @data = DATA.clone
     @buffer = BufferedTokenizer.new
     @testobj = testobj
@@ -24,11 +24,15 @@ class Reader < EventMachine::FileTail
       if @data.length == 0
         EM.stop_event_loop
       end
-    end
+    end # @buffer.extract
   end # def receive_data
 end # class Reader
 
 class TestFileTail < Test::Unit::TestCase
+
+  # This test should run slow. We are trying to ensure that
+  # our file_tail correctly reads data slowly fed into the file
+  # as 'tail -f' would.
   def test_filetail
     require 'tempfile'
     require 'timeout'
@@ -37,7 +41,7 @@ class TestFileTail < Test::Unit::TestCase
       tmp = Tempfile.new("testfiletail")
       data = DATA.clone
       EM.run do
-        EM::file_tail(tmp.path, Reader, self)
+        EM::file_tail(tmp.path, Reader, -1, self)
           
         timer = EM::PeriodicTimer.new(0.2) do
           tmp.puts data.shift
@@ -45,6 +49,22 @@ class TestFileTail < Test::Unit::TestCase
           sleep(rand * SLEEPMAX)
           timer.cancel if data.length == 0
         end
+      end # EM.run
+    end # Timeout.timeout
+  end # def test_filetail
+
+  def test_filetail_with_seek
+    require 'tempfile'
+    require 'timeout'
+
+    Timeout.timeout(2) do
+      tmp = Tempfile.new("testfiletail")
+      data = DATA.clone
+      data.each { |i| tmp.puts i }
+      tmp.flush
+      EM.run do
+        # Set startpos of 0
+        EM::file_tail(tmp.path, Reader, 0, self)
       end # EM.run
     end # Timeout.timeout
   end # def test_filetail
