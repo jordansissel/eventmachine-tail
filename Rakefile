@@ -1,7 +1,11 @@
 task :default => [:package]
 
-task :package do
-  system("svn up")
+task :test do
+  system("cd test; ruby test_filetail.rb")
+end
+
+task :package => [:test]  do
+  #system("git pull")
   system("gem build eventmachine-tail.gemspec")
 end
 

@@ -1,15 +1,16 @@
 Gem::Specification.new do |spec|
   files = []
-  dirs = %w{lib samples}
+  dirs = %w{lib samples test}
   dirs.each do |dir|
     files += Dir["#{dir}/**/*"]
   end
 
-  svnrev = %x{svn info}.split("\n").grep(/Revision:/).first.split(" ").last.to_i
+  #svnrev = %x{svn info}.split("\n").grep(/Revision:/).first.split(" ").last.to_i
+  rev = Time.now.strftime("%Y%m%d%H%M%S")
   spec.name = "eventmachine-tail"
-  spec.version = "0.1.#{svnrev}"
+  spec.version = "0.1.#{rev}"
   spec.summary = "eventmachine tail - a file tail implementation"
-  spec.description = "Add file 'tail' implemented with EventMachine"
+  spec.description = "Add file 'tail' implemented with EventMachine. Also includes a 'glob watch' class for watching a directory pattern for new matches, like /var/log/*.log"
   spec.add_dependency("eventmachine")
   spec.files = files
   spec.require_paths << "lib"
