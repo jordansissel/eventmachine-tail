@@ -101,7 +101,6 @@ class EventMachine::FileGlobWatchTail < EventMachine::FileGlobWatch
     super(path, interval)
     @handler = handler
     @args = args
-    ap @args
   end
 
   def file_found(path)

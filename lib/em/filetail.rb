@@ -161,7 +161,6 @@ class EventMachine::FileTail::FileWatcher < EventMachine::FileWatch
   end
 
   def file_modified
-    @logger.debug("modified")
     @filewatch.notify :modified
   end
 

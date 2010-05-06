@@ -1,6 +1,6 @@
 Gem::Specification.new do |spec|
   files = []
-  dirs = %w{lib samples test}
+  dirs = %w{lib samples test bin}
   dirs.each do |dir|
     files += Dir["#{dir}/**/*"]
   end
@@ -14,6 +14,9 @@ Gem::Specification.new do |spec|
   spec.add_dependency("eventmachine")
   spec.files = files
   spec.require_paths << "lib"
+  spec.bindir = "bin"
+  spec.executables << "rtail"
+
   spec.author = "Jordan Sissel"
   spec.email = "jls@semicomplete.com"
   spec.homepage = "http://code.google.com/p/semicomplete/wiki/EventMachineTail"
