@@ -16,7 +16,7 @@ For a simple file tailing example, look at "tail.rb":http://github.com/jordansis
 
 For an example of using glob watching file patterns, look at "globwatch.rb":http://github.com/jordansissel/eventmachine-tail/blob/master/samples/globwatch.rb
 
-For an example of using both glob watching and file tailing, check out "glob-tail.rb"http://github.com/jordansissel/eventmachine-tail/blob/master/samples/glob-tail.rb  - this project provides a glue class that helps you easily tail globs.
+For an example of using both glob watching and file tailing, check out "glob-tail.rb":http://github.com/jordansissel/eventmachine-tail/blob/master/samples/glob-tail.rb  - this project provides a glue class that helps you easily tail globs.
  
 
 
