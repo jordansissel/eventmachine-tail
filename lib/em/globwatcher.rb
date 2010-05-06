@@ -20,11 +20,10 @@ require "em/filetail"
 class EventMachine::FileGlobWatch
   def initialize(pathglob, interval=60)
     @pathglob = pathglob
-    #@handler = handler
     @files = Set.new
     @watches = Hash.new
     @logger = Logger.new(STDOUT)
-    @logger.level = Logger::INFO
+    @logger.level = ($DEBUG and Logger::DEBUG or Logger::WARN)
 
     # We periodically check here because it is easier than writing our own glob
     # parser (so we can smartly watch globs like /foo/*/bar*/*.log)
@@ -69,7 +68,11 @@ class EventMachine::FileGlobWatch
     # If EventMachine::watch_file fails, that's ok, I guess.
     # We'll still find the file 'missing' from the next glob attempt.
     begin
-      @watches[path] = EventMachine::watch_file(path, GlobFileWatch, self)
+      # EM currently has a bug that only the first handler for a watch_file
+      # on each file gets events. This causes globtails to never get data 
+      # since the glob is watching the file already.
+      # Until we fix that, let's skip file watching here.
+      #@watches[path] = EventMachine::watch_file(path, GlobFileWatch, self)
     rescue Errno::EACCES => e
       @logger.warn(e)
     end
@@ -94,15 +97,16 @@ class EventMachine::FileGlobWatch
 end # class EventMachine::FileGlobWatch
 
 class EventMachine::FileGlobWatchTail < EventMachine::FileGlobWatch
-  def initialize(path, handler=nil, *args)
-    super(path, *args)
+  def initialize(path, handler=nil, interval=60, *args)
+    super(path, interval)
     @handler = handler
     @args = args
+    ap @args
   end
 
   def file_found(path)
     begin
-      EventMachine::file_tail(path, @handler, *@args)
+      EventMachine::file_tail(path, @handler)
     rescue Errno::EACCES => e
       file_error(path, e)
     rescue Errno::EISDIR => e

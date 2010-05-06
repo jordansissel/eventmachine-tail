@@ -19,14 +19,15 @@ require "eventmachine-tail"
 require "ap" # from rubygem awesome_print
 
 class Reader < EventMachine::FileTail
-  def initialize(*args)
-    super(*args)
+  def initialize(path, startpos=-1)
+    super(path, startpos)
+    puts "Tailing #{path}"
     @buffer = BufferedTokenizer.new
   end
 
   def receive_data(data)
     @buffer.extract(data).each do |line|
-      ap [path, line]
+      puts "#{path}: #{line}"
     end
   end
 end
@@ -38,11 +39,8 @@ def main(args)
   end
 
   EventMachine.run do
-    #handler = EventMachine::FileGlobWatchTail.new(Reader)
     args.each do |path|
       EventMachine::FileGlobWatchTail.new(path, Reader)
-      #EventMachine::FileGlobWatch.new(path, handler)
-      #EventMachine::file_tail(path, handler)
     end
   end
 end # def main

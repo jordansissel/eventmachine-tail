@@ -40,7 +40,8 @@ class EventMachine::FileTail
   def initialize(path, startpos=-1)
     @path = path
     @logger = Logger.new(STDOUT)
-    @logger.level = Logger::WARN
+    @logger.level = ($DEBUG and Logger::DEBUG or Logger::WARN)
+    @logger.debug("Tailing #{path} starting at position #{startpos}")
 
     @fstat = File.stat(@path)
 
@@ -73,6 +74,11 @@ class EventMachine::FileTail
     end
   end
 
+  public
+  def receive_data(data)
+    @logger.warn("Got #{data.length} bytes")
+  end
+
   private
   def open
     @file.close if @file
@@ -90,7 +96,7 @@ class EventMachine::FileTail
 
   private
   def watch
-    EventMachine::watch_file(@path, FileWatcher, self)
+    EventMachine::watch_file(@path, EventMachine::FileTail::FileWatcher, self)
   end
 
   private
@@ -147,39 +153,42 @@ end # class EventMachine::FileTail
 
 # Internal usage only
 class EventMachine::FileTail::FileWatcher < EventMachine::FileWatch
-  def initialize(filestream)
-    @filestream = filestream
+  def initialize(filewatch)
+    @filewatch = filewatch
     @logger = Logger.new(STDOUT)
-    @logger.level = Logger::WARN
+    @logger.level = ($DEBUG and Logger::DEBUG or Logger::WARN)
+    @logger.debug("Watching on #{filewatch.path}")
   end
 
   def file_modified
-    @filestream.notify :modified
+    @logger.debug("modified")
+    @filewatch.notify :modified
   end
 
   def file_moved
-    @filestream.notify :moved
+    @filewatch.notify :moved
   end
 
   def file_deleted
-    @filestream.notify :deleted
+    @filewatch.notify :deleted
   end
 
   def unbind
-    @filestream.notify :unbind
+    @filewatch.notify :unbind
   end
 end # class EventMachine::FileTail::FileWatch < EventMachine::FileWatch
 
 # Add EventMachine::file_tail
 module EventMachine
-  
   # Tail a file.
   #
   # path is the path to the file to tail.
   # handler should be a module implementing 'receive_data' or
   # must be a subclasses of EventMachine::FileTail
   def self.file_tail(path, handler=nil, *args)
-    args.unshift(path)
+    # This code mostly styled on what EventMachine does in many of it's other
+    # methods.
+    args = [path, *args]
     klass = klass_from_handler(EventMachine::FileTail, handler, *args);
     c = klass.new(*args)
     yield c if block_given?

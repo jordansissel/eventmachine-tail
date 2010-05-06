@@ -9,8 +9,9 @@ require "eventmachine"
 require "eventmachine-tail"
 
 class Reader < EventMachine::FileTail
-  def initialize(path, startpos=0)
+  def initialize(path, startpos=-1)
     super(path, startpos)
+    puts "Tailing #{path}"
     @buffer = BufferedTokenizer.new
   end
 
