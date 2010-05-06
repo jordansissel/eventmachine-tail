@@ -1,0 +1,11 @@
+h1. eventmachine-tail
+
+This project contains two "EventMachine":http://wiki.github.com/eventmachine/eventmachine/ extensions.
+
+First, it adds an event-driven file-following similar to the unix 'tail -f'
+command. For example, you could use it to follow /var/log/messages the same way
+tail -f would.
+
+Second, it adds event-driven file patterns allowing you to watch a given file
+pattern for new or removed files. For example, you could watch /var/log/*.log
+for new/deleted files.
