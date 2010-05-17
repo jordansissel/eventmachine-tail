@@ -23,10 +23,11 @@ class Reader < EventMachine::FileTail
 end # class Reader
 
 def pattern_to_regexp(pattern)
-  pattern.gsub!("*", ".*")
-  pattern.gsub!("?", ".")
+  pattern.gsub!(".", "\\.") # fix literal .
+  pattern.gsub!("*", ".+")  # * becomes .+
+  pattern.gsub!("?", ".")   # ? becomes .
   return Regexp.new(pattern)
-end
+end # def pattern_to_regexp
 
 def main(args)
   with_filenames = true
@@ -68,8 +69,8 @@ def main(args)
                                           exclude = exclude_patterns,
                                           start_pos = -1,
                                           with_filenames = with_filenames)
-    end
-  end
+    end # args.each
+  end # EventMachine.run
 end # def main
 
 exit(main(ARGV))
