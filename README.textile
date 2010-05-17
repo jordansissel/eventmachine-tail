@@ -18,5 +18,24 @@ For an example of using glob watching file patterns, look at "globwatch.rb":http
 
 For an example of using both glob watching and file tailing, check out "glob-tail.rb":http://github.com/jordansissel/eventmachine-tail/blob/master/samples/glob-tail.rb  - this project provides a glue class that helps you easily tail globs.
  
+h2. rtail tool
 
+A script comes with eventmachine-tail called 'rtail'
 
+This script allows you to tail files similar to tail(1) but allows you to use
+the glob watching feature of eventmachine-tail to watch file path patterns
+(globs) in a tail-ey way.
+
+For example, if you want to 'tail -f' all files, recursively, in /var/log
+except ones matching '*.gz', you would use: 
+
+bc. rtail -x "*.gz" "/var/log/**/*"
+
+This will follow any existing files and follow newly-created ones that match
+the glob given as they are created. 
+
+By default, rtail checks the glob pattern every 5 seconds. You can change this
+value with the '-i' flag.
+
+You can also tell rtail to not prefix each line with the filename by giving the
+'-n' flag.
