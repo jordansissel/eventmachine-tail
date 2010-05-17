@@ -97,19 +97,31 @@ class EventMachine::FileGlobWatch
 end # class EventMachine::FileGlobWatch
 
 class EventMachine::FileGlobWatchTail < EventMachine::FileGlobWatch
-  def initialize(path, handler=nil, interval=60, *args)
+  def initialize(path, handler=nil, interval=60, exclude=[], *args)
     super(path, interval)
     @handler = handler
     @args = args
+    @exclude = exclude
   end
 
   def file_found(path)
     begin
-      EventMachine::file_tail(path, @handler)
+      @exclude.each do |exclude|
+        file_excluded(path) if exclude.match(path) != nil
+        return
+      end
+
+      EventMachine::file_tail(path, @handler, *@args)
     rescue Errno::EACCES => e
       file_error(path, e)
     rescue Errno::EISDIR => e
       file_error(path, e)
+    end
+  end
+
+  def file_excluded(path)
+    if $DEBUG
+      $stderr.puts "Skipping path #{path} due to exclude rule"
     end
   end
 
@@ -119,7 +131,7 @@ class EventMachine::FileGlobWatchTail < EventMachine::FileGlobWatch
 
   def file_error(path, e)
     $stderr.puts "#{e.class} while trying to tail #{path}"
-    # Ignore by default
+    # otherwise, drop the error by default
   end
 end # class EventMachine::FileGlobWatchHandler
 
@@ -133,4 +145,14 @@ module EventMachine
     yield c if block_given?
     return c
   end
-end
+
+  def self.watch_glob(path, handler=nil, *args)
+    # This code mostly styled on what EventMachine does in many of it's other
+    # methods.
+    args = [path, *args]
+    klass = klass_from_handler(EventMachine::FileGlobWatch, handler, *args);
+    c = klass.new(*args)
+    yield c if block_given?
+    return c
+  end # def EventMachine::watch_glob
+end # module EventMachine

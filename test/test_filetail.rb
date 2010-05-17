@@ -6,6 +6,7 @@ require 'eventmachine-tail'
 require 'tempfile'
 require 'test/unit'
 require 'timeout'
+require 'testcase_helpers.rb'
 
 
 # Generate some data
@@ -27,20 +28,13 @@ class Reader < EventMachine::FileTail
       expected = @data.shift
       @testobj.assert_equal(expected, line, 
           "Expected '#{expected}' on line #{@lineno}, but got '#{line}'")
-      if @data.length == 0
-        EM.stop_event_loop
-      end
+      @testobj.finish if @data.length == 0
     end # @buffer.extract
   end # def receive_data
 end # class Reader
 
 class TestFileTail < Test::Unit::TestCase
-  def abort_after_timeout(seconds)
-    EM::Timer.new(seconds) do
-      EM.stop_event_loop
-      flunk("Timeout (#{seconds} seconds) while running tests. Failing.")
-    end
-  end
+  include EventMachineTailTestHelpers
 
   # This test should run slow. We are trying to ensure that
   # our file_tail correctly reads data slowly fed into the file
