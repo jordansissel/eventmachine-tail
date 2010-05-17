@@ -5,7 +5,6 @@ task :test do
 end
 
 task :package => [:test]  do
-  #system("git pull")
   system("gem build eventmachine-tail.gemspec")
 end
 
