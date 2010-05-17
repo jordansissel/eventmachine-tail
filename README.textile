@@ -10,6 +10,61 @@ Second, it adds event-driven file patterns allowing you to watch a given file
 pattern for new or removed files. For example, you could watch /var/log/*.log
 for new/deleted files.
 
+h2. Why?
+
+For [http://code.google.com/p/logstash/ logstash], the log agents were
+event-driven using EventMachine. The log agents mainly get their data from
+logfiles. To that end, we needed a way to treat log files as a stream.
+
+There's a ruby gem 'file-tail' that implements tailing, but not in an
+event-driven way. This makes it hard to use in EventMachine programs like
+logstash.
+
+Thus, eventmachine-tail was born.
+
+Further, the usage patterns for logstash required the ability to watch a
+directory (or a file pattern) for new log files.
+
+h2. Implementation Thoughts
+
+h3. "Don't block the reactor"
+
+EventMachine::FileTail will only read one chunk (64K by default) from any file
+for each tick of the reactor. This helps ensure we don't spend too much time 
+reading from the file.
+
+A consequence of not reading the file "as fast as possible until eof" can cause
+longer data sets to take longer to read since there will be a small delay
+between each read since the reactor only runs about once every 50ms (depending
+on the polling features used).
+
+h3. EOF Handling
+
+When we are at the end of file, we rely on EventMachine::FileWatch to notify us
+when the file changes. On Linux this uses inotify and on OS X and FreeBSD will
+use kqueue to get event-driven notifications of file.
+
+h3. File truncation
+
+If the file length ever shortens, we assume this means the file was truncated.
+When this happens, we seek to the beginning of the file and continue reading.
+
+h3. File rotation
+
+If we notice that the inode (or underlying device) has changed, we will reopen
+the file by pathname. This change is generally an indication that our file has
+been rotated as part of some periodic log rotation.
+
+h3. Globs
+
+You can also use file [http://en.wikipedia.org/wiki/Glob_(programming) glob patterns]
+to select files to tail. This pattern is checked periodically to see if new
+files are found. 
+
+For example, if your java app writes to logfiles with generated filenames that
+are hard to predict, you should use EventMachine::FileGlobWatch to match any
+generated files as they are generated.
+
 h2. Example code
 
 For a simple file tailing example, look at "tail.rb":http://github.com/jordansissel/eventmachine-tail/blob/master/samples/tail.rb
