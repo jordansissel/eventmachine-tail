@@ -25,7 +25,7 @@ class Watcher < EventMachine::FileGlobWatch
     @testobj.finish if @data.length == 0
   end
 
-  def file_removed(path)
+  def file_deleted(path)
     @testobj.assert(@data.include?(path), "Expected #{path} in \n#{@data.join("\n")}")
     @data.delete(path)
     @testobj.finish if @data.length == 0

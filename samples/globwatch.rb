@@ -9,7 +9,7 @@ class Watcher < EventMachine::FileGlobWatch
     super(pathglob, interval)
   end
 
-  def file_removed(path)
+  def file_deleted(path)
     puts "Removed: #{path}"
   end
 
