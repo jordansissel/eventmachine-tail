@@ -42,7 +42,7 @@ h3. EOF Handling
 
 When we are at the end of file, we rely on EventMachine::FileWatch to notify us
 when the file changes. On Linux this uses inotify and on OS X and FreeBSD will
-use kqueue to get event-driven notifications of file.
+use kqueue to get event-driven notifications of file changes.
 
 h3. File truncation
 
@@ -64,6 +64,10 @@ files are found.
 For example, if your java app writes to logfiles with generated filenames that
 are hard to predict, you should use EventMachine::FileGlobWatch to match any
 generated files as they are generated.
+
+Globs are implemented in a polling manner because of the "non-obviousness" of
+implementing a glob notifier with file watches. It is on my todo list to
+implement in this way, however.
 
 h2. Example code
 
