@@ -43,6 +43,7 @@ class EventMachine::FileTail
     @logger.level = ($DEBUG and Logger::DEBUG or Logger::WARN)
     @logger.debug("Tailing #{path} starting at position #{startpos}")
 
+    @file = nil
     @fstat = File.stat(@path)
 
     if @fstat.directory?
