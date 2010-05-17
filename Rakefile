@@ -1,7 +1,7 @@
 task :default => [:package]
 
 task :test do
-  system("cd test; ruby test_filetail.rb")
+  system("cd test; ruby alltests.rb")
 end
 
 task :package => [:test]  do
