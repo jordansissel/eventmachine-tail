@@ -1,6 +1,5 @@
 #!/usr/bin/env ruby
 
-require "rubygems" if __FILE__ == $0
 require "eventmachine"
 require "logger"
 
@@ -9,7 +8,7 @@ EventMachine.epoll if EventMachine.epoll?
 # Tail a file.
 #
 # Example
-#   class Tailer < EventMachine::Tail
+#   class Tailer < EventMachine::FileTail
 #     def receive_data(data)
 #       puts "Got #{data.length} bytes"
 #     end
@@ -24,17 +23,25 @@ EventMachine.epoll if EventMachine.epoll?
 #   EM.run do
 #     Tailer.new("/var/log/messages")
 #   end
+#
+# See also: EventMachine::FileTail#receive_data
 class EventMachine::FileTail
+  # Maximum size to read at a time from a single file.
   CHUNKSIZE = 65536 
-  MAXSLEEP = 2
 
+  # 
+  #MAXSLEEP = 2
+
+  # The path of the file being tailed
   attr_reader :path
   
   # Tail a file
   #
-  # path is a string file path
-  # startpos is an offset to start tailing the file at. If -1, start at end of 
+  # * path is a string file path to tail
+  # * startpos is an offset to start tailing the file at. If -1, start at end of 
   # file.
+  #
+  # See also: EventMachine::file_tail
   #
   public
   def initialize(path, startpos=-1)
@@ -51,7 +58,7 @@ class EventMachine::FileTail
     end
 
     open
-    watch
+    watch { |what| notify(what) }
     if (startpos == -1)
       @file.sysseek(0, IO::SEEK_END)
     else
@@ -60,11 +67,33 @@ class EventMachine::FileTail
     end
   end # def initialize
 
-  # notify is invoked by EventMachine when the file you are tailing
-  # has been modified or otherwise needs to be acted on.
+  # This method is called when a tailed file has data read. 
   #
-  # You won't normally call this method.
+  # * data - string data read from the file.
+  #
+  # If you want to read lines from your file, you should use BufferedTokenizer
+  # (which comes with EventMachine):
+  #   class Tailer < EventMachine::FileTail
+  #     def initialize(*args)
+  #       super(*args)
+  #       @buffer = BufferedTokenizer.new
+  #     end
+  #
+  #     def receive_data(data)
+  #       @buffer.extract(data).each do |line|
+  #         # do something with 'line'
+  #       end
+  #     end  
   public
+  def receive_data(data)
+    raise NotImplementedError.new("#{self.class.name}#receive_data is not "\
+      "implemented. Did you forget to implement this in your subclass or "\
+      "module?")
+  end # def receive_data
+
+  # notify is invoked when the file you are tailing has been modified or
+  # otherwise needs to be acted on.
+  private
   def notify(status)
     @logger.debug("#{status} on #{path}")
     if status == :modified
@@ -75,11 +104,7 @@ class EventMachine::FileTail
     end
   end
 
-  public
-  def receive_data(data)
-    @logger.warn("Got #{data.length} bytes")
-  end
-
+  # Open (or reopen, if necessary) our file and schedule a read.
   private
   def open
     @file.close if @file
@@ -95,11 +120,13 @@ class EventMachine::FileTail
     schedule_next_read
   end
 
+  # Watch our file.
   private
-  def watch
-    EventMachine::watch_file(@path, EventMachine::FileTail::FileWatcher, self)
+  def watch(&block)
+    EventMachine::watch_file(@path, EventMachine::FileTail::FileWatcher, block)
   end
 
+  # Schedule a read.
   private
   def schedule_next_read
     EventMachine::add_timer(@naptime) do
@@ -107,6 +134,7 @@ class EventMachine::FileTail
     end
   end
 
+  # Read CHUNKSIZE from our file and pass it to .receive_data()
   private
   def read
     begin
@@ -132,11 +160,12 @@ class EventMachine::FileTail
       #@logger.info("EOF. Naptime: #{@naptime}")
     #end
 
-    # TODO(sissel): schedule an fstat instead of doing it now.
+    # TODO(sissel): should we schedule an fstat instead of doing it now?
     fstat = File.stat(@path)
     handle_fstat(fstat)
   end # def eof
 
+  # Handle fstat changes appropriately.
   private
   def handle_fstat(fstat)
     if (fstat.ino != @fstat.ino)
@@ -144,6 +173,7 @@ class EventMachine::FileTail
     elsif (fstat.rdev != @fstat.rdev)
       open # Reopen if the filesystem device changed
     elsif (fstat.size < @fstat.size)
+      # Schedule a read if the file size has changed
       @logger.info("File likely truncated... #{path}")
       @file.sysseek(0, IO::SEEK_SET)
       schedule_next_read
@@ -152,30 +182,32 @@ class EventMachine::FileTail
   end # def eof
 end # class EventMachine::FileTail
 
-# Internal usage only
+# Internal usage only. This class is used by EventMachine::FileTail
+# to watch files you are tailing.
+#
+# See also: EventMachine::FileTail#watch
 class EventMachine::FileTail::FileWatcher < EventMachine::FileWatch
-  def initialize(filewatch)
-    @filewatch = filewatch
+  def initialize(block)
     @logger = Logger.new(STDOUT)
     @logger.level = ($DEBUG and Logger::DEBUG or Logger::WARN)
-    @logger.debug("Watching on #{filewatch.path}")
-  end
+    @callback = block
+  end # def initialize
 
   def file_modified
-    @filewatch.notify :modified
-  end
+    @callback.call(:modified)
+  end # def file_modified
 
   def file_moved
-    @filewatch.notify :moved
-  end
+    @callback.call(:moved)
+  end # def file_moved
 
   def file_deleted
-    @filewatch.notify :deleted
-  end
+    @callback.call(:deleted)
+  end # def file_deleted
 
   def unbind
-    @filewatch.notify :unbind
-  end
+    @callback.call(:unbind)
+  end # def unbind
 end # class EventMachine::FileTail::FileWatch < EventMachine::FileWatch
 
 # Add EventMachine::file_tail
