@@ -62,7 +62,6 @@ class EventMachine::FileGlobWatch
 
   private
   def add(path)
-    @logger.info "Watching #{path}"
     @files.add(path)
 
     # If EventMachine::watch_file fails, that's ok, I guess.
@@ -106,10 +105,15 @@ class EventMachine::FileGlobWatchTail < EventMachine::FileGlobWatch
 
   def file_found(path)
     begin
+      @logger.info "#{self.class}: Trying #{path}"
       @exclude.each do |exclude|
-        file_excluded(path) if exclude.match(path) != nil
-        return
+        @logger.info "#{self.class}: Testing #{exclude} =~ #{path} == #{exclude.match(path) != nil}"
+        if exclude.match(path) != nil
+          file_excluded(path) 
+          return
+        end
       end
+      @logger.info "#{self.class}: Watching #{path}"
 
       EventMachine::file_tail(path, @handler, *@args)
     rescue Errno::EACCES => e
@@ -120,9 +124,7 @@ class EventMachine::FileGlobWatchTail < EventMachine::FileGlobWatch
   end
 
   def file_excluded(path)
-    if $DEBUG
-      $stderr.puts "Skipping path #{path} due to exclude rule"
-    end
+    @logger.info "#{self.class}: Skipping path #{path} due to exclude rule"
   end
 
   def file_removed(path)
