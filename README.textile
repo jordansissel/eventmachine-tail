@@ -12,7 +12,7 @@ for new/deleted files.
 
 h2. Why?
 
-For [http://code.google.com/p/logstash/ logstash], the log agents were
+For "logstash":http://code.google.com/p/logstash/, the log agents were
 event-driven using EventMachine. The log agents mainly get their data from
 logfiles. To that end, we needed a way to treat log files as a stream.
 
@@ -57,7 +57,7 @@ been rotated as part of some periodic log rotation.
 
 h3. Globs
 
-You can also use file [http://en.wikipedia.org/wiki/Glob_(programming) glob patterns]
+You can also use file "glob patterns":http://en.wikipedia.org/wiki/Glob_(programming)
 to select files to tail. This pattern is checked periodically to see if new
 files are found. 
 
