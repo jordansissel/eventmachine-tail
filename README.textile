@@ -25,6 +25,14 @@ Thus, eventmachine-tail was born.
 Further, the usage patterns for logstash required the ability to watch a
 directory (or a file pattern) for new log files.
 
+h2. Get eventmachine-tail
+
+To install eventmachine-tail, you only need to use gem:
+
+bc. gem install eventmachine-tail
+
+This will also install the rtail tool described below.
+
 h2. Implementation Thoughts
 
 h3. "Don't block the reactor"
