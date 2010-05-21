@@ -4,6 +4,7 @@ require "eventmachine"
 require "logger"
 
 EventMachine.epoll if EventMachine.epoll?
+EventMachine.kqueue = true if EventMachine.kqueue?
 
 # Tail a file.
 #

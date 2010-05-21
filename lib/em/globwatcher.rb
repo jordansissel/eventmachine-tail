@@ -6,6 +6,7 @@ require "logger"
 require "set"
 
 EventMachine.epoll if EventMachine.epoll?
+EventMachine.kqueue = true if EventMachine.kqueue?
 
 # A file glob pattern watcher for EventMachine.
 #
