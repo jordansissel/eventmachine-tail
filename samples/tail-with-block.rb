@@ -17,6 +17,9 @@ def main(args)
   EventMachine.run do
     args.each do |path|
       EventMachine::file_tail(path) do |filetail, line|
+        # filetail is the 'EventMachine::FileTail' instance for this file.
+        # line is the line read from thefile.
+        # this block is invoked for every line read.
         puts line
       end
     end
