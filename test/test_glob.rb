@@ -34,7 +34,7 @@ end # class Reader
 
 class TestGlobWatcher < Test::Unit::TestCase
   include EventMachineTailTestHelpers
-  SLEEPMAX = 2
+  SLEEPMAX = 1
 
   def setup
     @watchinterval = 0.2
