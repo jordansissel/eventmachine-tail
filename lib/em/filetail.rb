@@ -45,7 +45,7 @@ class EventMachine::FileTail
   # See also: EventMachine::file_tail
   #
   public
-  def initialize(path, startpos=-1)
+  def initialize(path, startpos=-1, &block)
     @path = path
     @logger = Logger.new(STDOUT)
     @logger.level = ($DEBUG and Logger::DEBUG or Logger::WARN)
@@ -53,6 +53,11 @@ class EventMachine::FileTail
 
     @file = nil
     @fstat = File.stat(@path)
+
+    if block_given?
+      @handler = block
+      @buffer = BufferedTokenizer.new
+    end
 
     if @fstat.directory?
       raise Errno::EISDIR.new(@path)
@@ -87,9 +92,15 @@ class EventMachine::FileTail
   #     end  
   public
   def receive_data(data)
-    raise NotImplementedError.new("#{self.class.name}#receive_data is not "\
-      "implemented. Did you forget to implement this in your subclass or "\
-      "module?")
+    if @handler # FileTail.new called with a block
+      @buffer.extract(data).each do |line|
+        @handler.call(self, line)
+      end
+    else
+      raise NotImplementedError.new("#{self.class.name}#receive_data is not "\
+        "implemented. Did you forget to implement this in your subclass or "\
+        "module?")
+    end
   end # def receive_data
 
   # notify is invoked when the file you are tailing has been modified or
@@ -218,13 +229,12 @@ module EventMachine
   # path is the path to the file to tail.
   # handler should be a module implementing 'receive_data' or
   # must be a subclasses of EventMachine::FileTail
-  def self.file_tail(path, handler=nil, *args)
+  def self.file_tail(path, handler=nil, *args, &block)
     # This code mostly styled on what EventMachine does in many of it's other
     # methods.
     args = [path, *args]
     klass = klass_from_handler(EventMachine::FileTail, handler, *args);
-    c = klass.new(*args)
-    yield c if block_given?
+    c = klass.new(*args, &block)
     return c
   end # def self.file_tail
 end # module EventMachine
