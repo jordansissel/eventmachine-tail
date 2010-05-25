@@ -229,6 +229,17 @@ module EventMachine
   # path is the path to the file to tail.
   # handler should be a module implementing 'receive_data' or
   # must be a subclasses of EventMachine::FileTail
+  #
+  # For example:
+  #   EM::file_tail("/var/log/messages", MyHandler)
+  #
+  # If a block is given, and the handler is not specified or does
+  # not implement EventMachine::FileTail#receive_data, then it
+  # will be called as such:
+  #   EM::file_tail(...) do |filetail, line|
+  #     # filetail is the FileTail instance watching the file
+  #     # line is the line read from the file
+  #   end
   def self.file_tail(path, handler=nil, *args, &block)
     # This code mostly styled on what EventMachine does in many of it's other
     # methods.
