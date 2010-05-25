@@ -1,8 +1,9 @@
 #!/usr/bin/env ruby
 #
-# Simple 'tail -f' example.
+# Simple 'tail -f' example. This one uses a block instead of a separate handler
+# class
 # Usage example:
-#   tail.rb /var/log/messages
+#   tail-with-block.rb /var/log/messages
 
 require "rubygems"
 require "eventmachine"
