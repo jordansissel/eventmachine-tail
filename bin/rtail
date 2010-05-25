@@ -63,6 +63,13 @@ def main(args)
   end
 
   EventMachine.run do
+    Signal.trap("INT") do
+      EventMachine.schedule do
+        $stderr.puts "Got SIGINT"
+        exit 128 + (Signal.list["INT"])
+      end
+    end
+
     args.each do |path|
       EventMachine::FileGlobWatchTail.new(path, Reader,
                                           interval = globcheck_interval,
