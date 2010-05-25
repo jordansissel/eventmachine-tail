@@ -4,7 +4,10 @@ task :test do
   system("cd test; ruby alltests.rb")
 end
 
-task :package => [:test]  do
+task :package => [:test, :package_real]  do
+end
+
+task :package_real do
   system("gem build eventmachine-tail.gemspec")
 end
 
