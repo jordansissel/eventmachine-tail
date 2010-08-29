@@ -86,11 +86,61 @@ class TestGlobWatcher < Test::Unit::TestCase
       datacopy = @data.clone
       timer = EM::PeriodicTimer.new(0.2) do
         #puts "Creating: #{datacopy.first}"
-        File.new(datacopy.shift, "w")
+        File.new(datacopy.shift, "w").close
         sleep(rand * SLEEPMAX)
         timer.cancel if datacopy.length == 0
       end
     end # EM.run
   end # def test_glob_finds_newly_created_files_at_runtime
+
+  def test_glob_ignores_file_renames
+    EM.run do
+      abort_after_timeout(SLEEPMAX * @data.length + 10)
+
+      EM::watch_glob("#{@dir}/*", Watcher, @watchinterval, @data.clone, self)
+
+      datacopy = @data.clone
+      timer = EM::PeriodicTimer.new(0.2) do
+        filename = datacopy.shift
+        File.new(filename, "w").close
+        sleep(rand * SLEEPMAX)
+
+        # This file rename should be ignored.
+        EM::Timer.new(2) do
+          newname = "#{filename}.renamed"
+          File.rename(filename, newname)
+
+          # Track the new filename so teardown removes it.
+          @data << newname
+        end
+        timer.cancel if datacopy.length == 0
+      end
+    end
+  end # def test_glob_ignores_file_renames
+
+  def test_glob_ignores_duplicate_hardlinks
+    EM.run do
+      abort_after_timeout(SLEEPMAX * @data.length + 10)
+
+      EM::watch_glob("#{@dir}/*", Watcher, @watchinterval, @data.clone, self)
+
+      datacopy = @data.clone
+      timer = EM::PeriodicTimer.new(0.2) do
+        filename = datacopy.shift
+        File.new(filename, "w").close
+        sleep(rand * SLEEPMAX)
+
+        # This file rename should be ignored.
+        EM::Timer.new(2) do
+          newname = "#{filename}.renamed"
+          File.link(filename, newname)
+
+          # Track the new filename so teardown removes it.
+          @data << newname
+        end
+        timer.cancel if datacopy.length == 0
+      end
+    end
+  end # def test_glob_ignores_file_renames
 end # class TestGlobWatcher
 

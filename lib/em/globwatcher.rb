@@ -35,7 +35,7 @@ class EventMachine::FileGlobWatch
   # * interval - number of seconds between scanning the glob for changes
   def initialize(glob, interval=60)
     @glob = glob
-    @files = Set.new
+    @files = Hash.new
     @watches = Hash.new
     @logger = Logger.new(STDOUT)
     @logger.level = ($DEBUG and Logger::DEBUG or Logger::WARN)
@@ -83,29 +83,37 @@ class EventMachine::FileGlobWatch
   private
   def find_files
     @logger.info("Searching for files in #{@glob}")
-    list = Set.new(Dir.glob(@glob))
+    list = Dir.glob(@glob)
+
+    known_files = @files.clone
     list.each do |path|
-      next if @files.include?(path)
-      add(path)
+      fileinfo = FileInfo.new(path) rescue next
+      # Skip files that have the same inode (renamed or hardlinked)
+      known_files.delete(fileinfo.stat.ino)
+      next if @files.include?(fileinfo.stat.ino)
+
+      track(fileinfo)
+      file_found(path)
     end
 
-    (@files - list).each do |missing|
-      remove(missing)
+    # Report missing files.
+    known_files.each do |inode, fileinfo|
+      remove(fileinfo)
     end
   end # def find_files
 
   # Remove a file from being watched and notify file_deleted()
   private
-  def remove(path)
-    @files.delete(path)
-    @watches.delete(path)
-    file_deleted(path)
+  def remove(fileinfo)
+    @files.delete(fileinfo.stat.ino)
+    @watches.delete(fileinfo.path)
+    file_deleted(fileinfo.path)
   end # def remove
 
   # Add a file to watch and notify file_found()
   private
-  def add(path)
-    @files.add(path)
+  def track(fileinfo)
+    @files[fileinfo.stat.ino] = fileinfo
 
     # If EventMachine::watch_file fails, that's ok, I guess.
     # We'll still find the file 'missing' from the next glob attempt.
@@ -120,7 +128,6 @@ class EventMachine::FileGlobWatch
     #rescue Errno::EACCES => e
       #@logger.warn(e)
     #end
-    file_found(path)
   end # def watch
 
   private
@@ -139,6 +146,17 @@ class EventMachine::FileGlobWatch
       block.call path
     end
   end # class EventMachine::FileGlobWatch::FileWatcher < EventMachine::FileWatch
+
+  private 
+  class FileInfo
+    attr_reader :path
+    attr_reader :stat
+
+    def initialize(path)
+      @path = path
+      @stat = File.stat(path)
+    end
+  end # class FileInfo
 end # class EventMachine::FileGlobWatch
 
 # A glob tailer for EventMachine
