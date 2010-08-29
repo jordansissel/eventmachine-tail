@@ -63,14 +63,16 @@ class EventMachine::FileTail
       raise Errno::EISDIR.new(@path)
     end
 
-    open
-    watch { |what| notify(what) }
-    if (startpos == -1)
-      @file.sysseek(0, IO::SEEK_END)
-    else
-      @file.sysseek(startpos, IO::SEEK_SET)
-      schedule_next_read
-    end
+    EventMachine::next_tick do
+      open
+      watch { |what| notify(what) }
+      if (startpos == -1)
+        @file.sysseek(0, IO::SEEK_END)
+      else
+        @file.sysseek(startpos, IO::SEEK_SET)
+        schedule_next_read
+      end
+    end # EventMachine::next_tick
   end # def initialize
 
   # This method is called when a tailed file has data read. 
@@ -112,7 +114,8 @@ class EventMachine::FileTail
       schedule_next_read
     elsif status == :moved
       # TODO(sissel): read to EOF, then reopen.
-      open
+      # If the file was moved, treat it like EOF.
+      eof
     end
   end
 
@@ -121,6 +124,7 @@ class EventMachine::FileTail
   def open
     @file.close if @file
     begin
+      @logger.debug "Opening file #{@path}"
       @file = File.open(@path, "r")
     rescue Errno::ENOENT
       # no file found
@@ -135,7 +139,8 @@ class EventMachine::FileTail
   # Watch our file.
   private
   def watch(&block)
-    EventMachine::watch_file(@path, EventMachine::FileTail::FileWatcher, block)
+    @logger.debug "Starting watch on #{@path}"
+    @watch = EventMachine::watch_file(@path, EventMachine::FileTail::FileWatcher, block)
   end
 
   # Schedule a read.
@@ -149,6 +154,7 @@ class EventMachine::FileTail
   # Read CHUNKSIZE from our file and pass it to .receive_data()
   private
   def read
+    @logger.debug "#{self}: Reading..."
     begin
       data = @file.sysread(CHUNKSIZE)
       # Won't get here if sysread throws EOF
@@ -173,25 +179,49 @@ class EventMachine::FileTail
     #end
 
     # TODO(sissel): should we schedule an fstat instead of doing it now?
-    fstat = File.stat(@path)
-    handle_fstat(fstat)
+    begin
+      fstat = File.stat(@path)
+      handle_fstat(fstat)
+    rescue Errno::ENOENT
+      # The file disappeared. Wait for it to reappear.
+      # This can happen if it was deleted or moved during log rotation.
+      @logger.debug "File not found, waiting for it to reappear. (#{@path})"
+      timer = EM::PeriodicTimer.new(0.250) do
+        begin
+          fstat = File.stat(@path)
+          handle_fstat(fstat)
+          timer.cancel
+        rescue Errno::ENOENT
+          # ignore
+        end # begin/rescue ENOENT
+      end # EM::PeriodicTimer
+    end # begin/rescue ENOENT
   end # def eof
 
   # Handle fstat changes appropriately.
   private
   def handle_fstat(fstat)
-    if (fstat.ino != @fstat.ino)
-      open # Reopen if the inode has changed
-    elsif (fstat.rdev != @fstat.rdev)
-      open # Reopen if the filesystem device changed
+    if (fstat.ino != @fstat.ino or fstat.rdev != @fstat.rdev)
+      EventMachine::next_tick do
+        @logger.debug "Inode or device changed. Reopening..."
+        @watch.stop_watching
+        open # Reopen if the inode has changed
+        watch { |what| notify(what) }
+      end
     elsif (fstat.size < @fstat.size)
       # Schedule a read if the file size has changed
       @logger.info("File likely truncated... #{path}")
       @file.sysseek(0, IO::SEEK_SET)
       schedule_next_read
+    else
+      #@logger.debug "Nothing to run for fstat..."
     end
     @fstat = fstat
   end # def eof
+
+  def to_s
+    return "#{self.class.name}(#{@path}) @ pos:#{@file.sysseek(0, IO::SEEK_CUR)}"
+  end # def to_s
 end # class EventMachine::FileTail
 
 # Internal usage only. This class is used by EventMachine::FileTail
