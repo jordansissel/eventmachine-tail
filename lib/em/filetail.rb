@@ -55,14 +55,14 @@ class EventMachine::FileTail
     @logger.debug("Tailing #{path} starting at position #{startpos}")
 
     @file = nil
-    @fstat = File.stat(@path)
+    read_file_metadata
 
     if block_given?
       @handler = block
       @buffer = BufferedTokenizer.new
     end
 
-    if @fstat.directory?
+    if @filestat.directory?
       raise Errno::EISDIR.new(@path)
     end
 
@@ -183,16 +183,18 @@ class EventMachine::FileTail
 
     # TODO(sissel): should we schedule an fstat instead of doing it now?
     begin
-      fstat = File.stat(@path)
-      handle_fstat(fstat)
+      read_file_metadata do |filestat, linkstat, linktarget|
+        handle_fstat(filestat, linkstat, linktarget)
+      end
     rescue Errno::ENOENT
       # The file disappeared. Wait for it to reappear.
       # This can happen if it was deleted or moved during log rotation.
       @logger.debug "File not found, waiting for it to reappear. (#{@path})"
       timer = EM::PeriodicTimer.new(0.250) do
         begin
-          fstat = File.stat(@path)
-          handle_fstat(fstat)
+          read_file_metadata do |filestat, linkstat, linktarget|
+            handle_fstat(filestat, linkstat, linktarget)
+          end
           timer.cancel
         rescue Errno::ENOENT
           # ignore
@@ -201,25 +203,58 @@ class EventMachine::FileTail
     end # begin/rescue ENOENT
   end # def eof
 
+  private
+  def read_file_metadata(&block)
+    filestat = File.stat(@path)
+    symlink_stat = nil
+    symlink_target = nil
+    if File.symlink?(@path)
+      symlink_stat = File.lstat(@path)
+      symlink_target = File.readlink(@path)
+    end
+
+    if block_given?
+      yield filestat, symlink_stat, symlink_target
+    end
+
+    @filestat = filestat
+    @symlink_stat = symlink_stat
+    @symlink_target = symlink_target
+  end # def read_file_metadata
+
   # Handle fstat changes appropriately.
   private
-  def handle_fstat(fstat)
-    if (fstat.ino != @fstat.ino or fstat.rdev != @fstat.rdev)
+  def handle_fstat(filestat, symlinkstat, symlinktarget)
+    if (filestat.ino != @filestat.ino or filestat.rdev != @filestat.rdev)
       EventMachine::next_tick do
         @logger.debug "Inode or device changed. Reopening..."
         @watch.stop_watching
         open # Reopen if the inode has changed
         watch { |what| notify(what) }
       end
-    elsif (fstat.size < @fstat.size)
+    elsif (filestat.size < @filestat.size)
       # Schedule a read if the file size has changed
       @logger.info("File likely truncated... #{path}")
       @file.sysseek(0, IO::SEEK_SET)
       schedule_next_read
-    else
-      #@logger.debug "Nothing to run for fstat..."
     end
-    @fstat = fstat
+
+    if symlinkstat.ino != @symlink_stat.ino
+      EventMachine::next_tick do
+        @logger.debug "Inode or device changed on symlink. Reopening..."
+        @watch.stop_watching
+        open # Reopen if the inode has changed
+        watch { |what| notify(what) }
+      end
+    elsif symlinktarget != @symlink_target
+      EventMachine::next_tick do
+        @logger.debug "Symlink target changed. Reopening..."
+        @watch.stop_watching
+        open # Reopen if the inode has changed
+        watch { |what| notify(what) }
+      end
+    end
+
   end # def eof
 
   def to_s

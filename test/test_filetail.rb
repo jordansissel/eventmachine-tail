@@ -140,5 +140,61 @@ class TestFileTail < Test::Unit::TestCase
 
     File.delete(filename)
   end # def test_filetail_tracks_renames
+
+  def test_filetail_tracks_symlink_changes
+    to_delete = []
+    link = Tempfile.new("testlink")
+    File.delete(link.path)
+    to_delete << link
+    tmp = Tempfile.new("testfiletail")
+    to_delete << tmp
+    data = DATA.clone
+    File.symlink(tmp.path, link.path)
+
+    data_copy = data.clone
+
+    # Write first so the first read happens immediately
+    tmp.puts data_copy.shift
+    tmp.flush
+    EM.run do
+      abort_after_timeout(DATA.length * SLEEPMAX + 10)
+
+      lineno = 0
+      # Start at file position 0.
+      EM::file_tail(tmp.path, nil, 0) do |filetail, line|
+        lineno += 1
+        expected = data.shift
+        #puts "Got #{lineno}: #{line}"
+        assert_equal(expected, line, 
+                     "Expected '#{expected}' on line #{lineno}, but got '#{line}'")
+        finish if data.length == 0
+
+        # Start a timer on the first read.
+        # This is to ensure we have the file tailing before
+        # we try to rename.
+        if lineno == 1
+          timer = EM::PeriodicTimer.new(0.2) do
+            value = data_copy.shift
+            tmp.puts value
+            tmp.flush
+            sleep(rand * SLEEPMAX)
+
+            # Make a new file and update the symlink to point to it.
+            # This is to simulate log rotation, etc.
+            tmp = Tempfile.new("testfiletail")
+            to_delete << tmp
+            File.delete(link.path)
+            File.symlink(tmp.path, link.path)
+
+            timer.cancel if data_copy.length == 0
+          end # timer
+        end # if lineno == 1
+      end # EM::filetail(...)
+    end # EM.run
+
+    to_delete.each do |f|
+      File.delete(f)
+    end
+  end # def test_filetail_tracks_renames
 end # class TestFileTail
 
