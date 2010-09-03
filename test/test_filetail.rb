@@ -161,10 +161,13 @@ class TestFileTail < Test::Unit::TestCase
 
       lineno = 0
       # Start at file position 0.
-      EM::file_tail(tmp.path, nil, 0) do |filetail, line|
+      EM::file_tail(link.path, nil, 0) do |filetail, line|
+        # This needs to be less than the interval at which we are changing symlinks.
+        filetail.symlink_check_interval = 0.1
+
         lineno += 1
         expected = data.shift
-        #puts "Got #{lineno}: #{line}"
+        puts "Got #{lineno}: #{line}" if $debug
         assert_equal(expected, line, 
                      "Expected '#{expected}' on line #{lineno}, but got '#{line}'")
         finish if data.length == 0
@@ -181,11 +184,12 @@ class TestFileTail < Test::Unit::TestCase
 
             # Make a new file and update the symlink to point to it.
             # This is to simulate log rotation, etc.
+            tmp.close
             tmp = Tempfile.new("testfiletail")
             to_delete << tmp
             File.delete(link.path)
             File.symlink(tmp.path, link.path)
-
+            puts "#{tmp.path} => #{link.path}" if $debug
             timer.cancel if data_copy.length == 0
           end # timer
         end # if lineno == 1
@@ -193,7 +197,7 @@ class TestFileTail < Test::Unit::TestCase
     end # EM.run
 
     to_delete.each do |f|
-      File.delete(f)
+      File.delete(f.path)
     end
   end # def test_filetail_tracks_renames
 end # class TestFileTail

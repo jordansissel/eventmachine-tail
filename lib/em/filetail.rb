@@ -30,7 +30,6 @@ class EventMachine::FileTail
   # Maximum size to read at a time from a single file.
   CHUNKSIZE = 65536 
 
-  # 
   #MAXSLEEP = 2
 
   # The path of the file being tailed
@@ -38,6 +37,14 @@ class EventMachine::FileTail
 
   # The current file read position
   attr_reader :position
+
+  # Check interval when checking symlinks for changes. This is only useful
+  # when you are actually tailing symlinks.
+  attr_accessor :symlink_check_interval
+
+  # Check interval for looking for a file if we are tailing it and it has
+  # gone missing.
+  attr_accessor :missing_file_check_interval
   
   # Tail a file
   #
@@ -45,36 +52,53 @@ class EventMachine::FileTail
   # * startpos is an offset to start tailing the file at. If -1, start at end of 
   # file.
   #
+  # If you want debug messages, run ruby with '-d' or set $DEBUG
+  #
   # See also: EventMachine::file_tail
   #
   public
   def initialize(path, startpos=-1, &block)
     @path = path
-    @logger = Logger.new(STDOUT)
+    @logger = Logger.new(STDERR)
     @logger.level = ($DEBUG and Logger::DEBUG or Logger::WARN)
     @logger.debug("Tailing #{path} starting at position #{startpos}")
 
     @file = nil
+    @want_eof = false
+    @want_read = false
+    @want_reopen = false
+    @reopen_on_eof = false
+    @symlink_timer = nil
+    @symlink_target = nil
+    @symlink_stat = nil
+
+    @symlink_check_interval = 1
+    @missing_file_check_interval = 1
+
     read_file_metadata
+
+    if @filestat.directory?
+      raise Errno::EISDIR.new(@path)
+    end
 
     if block_given?
       @handler = block
       @buffer = BufferedTokenizer.new
     end
 
-    if @filestat.directory?
-      raise Errno::EISDIR.new(@path)
-    end
-
     EventMachine::next_tick do
       open
-      watch { |what| notify(what) }
       if (startpos == -1)
         @file.sysseek(0, IO::SEEK_END)
+        # TODO(sissel): if we don't have inotify or kqueue, should we
+        # schedule a next read, here?
+        # Is there a race condition between setting the file position and
+        # watching given the two together are not atomic?
       else
         @file.sysseek(startpos, IO::SEEK_SET)
         schedule_next_read
       end
+      watch
     end # EventMachine::next_tick
   end # def initialize
 
@@ -108,19 +132,21 @@ class EventMachine::FileTail
     end
   end # def receive_data
 
-  # notify is invoked when the file you are tailing has been modified or
-  # otherwise needs to be acted on.
+  # notify is invoked by EM::watch_file when the file you are tailing has been
+  # modified or otherwise needs to be acted on.
   private
   def notify(status)
-    @logger.debug("#{status} on #{path}")
+    @logger.debug("notify: #{status} on #{path}")
     if status == :modified
       schedule_next_read
     elsif status == :moved
-      # TODO(sissel): read to EOF, then reopen.
-      # If the file was moved, treat it like EOF.
-      eof
+      # read to EOF, then reopen.
+      @reopen_on_eof = true
+      schedule_next_read
+    elsif status == :unbind
+      # Do what?
     end
-  end
+  end # def notify
 
   # Open (or reopen, if necessary) our file and schedule a read.
   private
@@ -129,30 +155,60 @@ class EventMachine::FileTail
     begin
       @logger.debug "Opening file #{@path}"
       @file = File.open(@path, "r")
-    rescue Errno::ENOENT
-      # no file found
-      raise
+    rescue Errno::ENOENT => e
+      @logger.debug("File not found: '#{@path}' (#{e})")
+      raise e
     end
 
-    @naptime = 0;
+    @naptime = 0
     @position = 0
     schedule_next_read
-  end
+  end # def open
 
   # Watch our file.
   private
-  def watch(&block)
-    @logger.debug "Starting watch on #{@path}"
-    @watch = EventMachine::watch_file(@path, EventMachine::FileTail::FileWatcher, block)
-  end
+  def watch
+    @watch.stop_watching if @watch
+    @symlink_timer.cancel if @symlink_timer
 
-  # Schedule a read.
+    @logger.debug "Starting watch on #{@path}"
+    callback = proc { |what| notify(what) }
+    @watch = EventMachine::watch_file(@path, EventMachine::FileTail::FileWatcher, callback)
+    watch_symlink if @symlink_target
+  end # def watch
+
+  # Watch a symlink
+  # EM doesn't currently support watching symlinks alone (inotify follows
+  # symlinks by default), so let's periodically stat the symlink.
+  private
+  def watch_symlink(&block)
+    @symlink_timer.cancel if @symlink_timer
+
+    @logger.debug "Launching timer to check for symlink changes since EM can't right now: #{@path}"
+    @symlink_timer = EM::PeriodicTimer.new(@symlink_check_interval) do
+      begin
+        @logger.debug("Checking #{@path}")
+        read_file_metadata do |filestat, linkstat, linktarget|
+          handle_fstat(filestat, linkstat, linktarget)
+        end
+      rescue Errno::ENOENT
+        # The file disappeared. Wait for it to reappear.
+        # This can happen if it was deleted or moved during log rotation.
+        @logger.debug "File not found, waiting for it to reappear. (#{@path})"
+      end # begin/rescue ENOENT
+    end # EM::PeriodicTimer
+  end # def watch_symlink
+
   private
   def schedule_next_read
-    EventMachine::add_timer(@naptime) do
-      read
-    end
-  end
+    if !@want_read
+      @want_read = true
+      EventMachine::add_timer(@naptime) do
+        @want_read = false
+        read
+      end
+    end # if !@want_read
+  end # def schedule_next_read
 
   # Read CHUNKSIZE from our file and pass it to .receive_data()
   private
@@ -160,44 +216,71 @@ class EventMachine::FileTail
     @logger.debug "#{self}: Reading..."
     begin
       data = @file.sysread(CHUNKSIZE)
+
       # Won't get here if sysread throws EOF
       @position += data.length
       @naptime = 0
+
+      # Subclasses should implement receive_data
       receive_data(data)
       schedule_next_read
     rescue EOFError
-      eof
+      schedule_eof
     end
   end
 
+  # Do EOF handling on next EM iteration
+  def schedule_eof
+    if !@want_eof
+      @want_eof = true
+      EventMachine::next_tick do
+        @want_eof = false
+        eof
+      end # EventMachine::next_tick
+    end # if !@want_eof
+  end # def schedule_eof
+
+  private
+  def schedule_reopen
+    if !@want_reopen
+      EventMachine::next_tick do
+        @want_reopen = false
+        open
+        watch
+      end
+    end # if !@want_reopen
+  end # def schedule_reopen
+
   private
   def eof
-    # TODO(sissel): This will be necessary if we can't use inotify or kqueue to
-    # get notified of file changes
-    #if @need_scheduling
-      #@naptime = 0.100 if @naptime == 0
-      #@naptime *= 2
-      #@naptime = MAXSLEEP if @naptime > MAXSLEEP
-      #@logger.info("EOF. Naptime: #{@naptime}")
-    #end
+    @want_eof = false
 
-    # TODO(sissel): should we schedule an fstat instead of doing it now?
+    if @reopen_on_eof
+      @reopen_on_eof = false
+      schedule_reopen
+    end
+
+    # EOF actions:
+    # - Check if the file inode/device is changed
+    # - If symlink, check if the symlink has changed
+    # - Otherwise, do nothing
     begin
       read_file_metadata do |filestat, linkstat, linktarget|
         handle_fstat(filestat, linkstat, linktarget)
       end
     rescue Errno::ENOENT
-      # The file disappeared. Wait for it to reappear.
-      # This can happen if it was deleted or moved during log rotation.
-      @logger.debug "File not found, waiting for it to reappear. (#{@path})"
-      timer = EM::PeriodicTimer.new(0.250) do
+        # The file disappeared. Wait for it to reappear.
+        # This can happen if it was deleted or moved during log rotation.
+      timer = EM::PeriodicTimer.new(@missing_file_check_interval) do
         begin
           read_file_metadata do |filestat, linkstat, linktarget|
             handle_fstat(filestat, linkstat, linktarget)
           end
           timer.cancel
         rescue Errno::ENOENT
-          # ignore
+          # The file disappeared. Wait for it to reappear.
+          # This can happen if it was deleted or moved during log rotation.
+          @logger.debug "File not found, waiting for it to reappear. (#{@path})"
         end # begin/rescue ENOENT
       end # EM::PeriodicTimer
     end # begin/rescue ENOENT
@@ -208,9 +291,10 @@ class EventMachine::FileTail
     filestat = File.stat(@path)
     symlink_stat = nil
     symlink_target = nil
+
     if File.symlink?(@path)
-      symlink_stat = File.lstat(@path)
-      symlink_target = File.readlink(@path)
+      symlink_stat = File.lstat(@path) rescue nil
+      symlink_target = File.readlink(@path) rescue nil
     end
 
     if block_given?
@@ -225,37 +309,32 @@ class EventMachine::FileTail
   # Handle fstat changes appropriately.
   private
   def handle_fstat(filestat, symlinkstat, symlinktarget)
-    if (filestat.ino != @filestat.ino or filestat.rdev != @filestat.rdev)
-      EventMachine::next_tick do
-        @logger.debug "Inode or device changed. Reopening..."
-        @watch.stop_watching
-        open # Reopen if the inode has changed
-        watch { |what| notify(what) }
-      end
+    # If the symlink target changes, the filestat.ino is very likely to have
+    # changed since that is the stat on the resolved file (that the link points
+    # to). However, we'll check explicitly for the symlink target changing
+    # for better debuggability.
+    if symlinktarget
+      if symlinkstat.ino != @symlink_stat.ino
+        @logger.debug "Inode or device changed on symlink. Reopening..."
+        @reopen_on_eof = true
+        schedule_next_read
+      elsif symlinktarget != @symlink_target
+        @logger.debug "Symlink target changed. Reopening..."
+        @reopen_on_eof = true
+        schedule_next_read
+      end 
+    elsif (filestat.ino != @filestat.ino or filestat.rdev != @filestat.rdev)
+      @logger.debug "Inode or device changed. Reopening..."
+      @logger.debug filestat
+      @reopen_on_eof = true
+      schedule_next_read
     elsif (filestat.size < @filestat.size)
-      # Schedule a read if the file size has changed
+      # If the file size shrank, assume truncation and seek to the beginning.
       @logger.info("File likely truncated... #{path}")
       @file.sysseek(0, IO::SEEK_SET)
       schedule_next_read
     end
-
-    if symlinkstat.ino != @symlink_stat.ino
-      EventMachine::next_tick do
-        @logger.debug "Inode or device changed on symlink. Reopening..."
-        @watch.stop_watching
-        open # Reopen if the inode has changed
-        watch { |what| notify(what) }
-      end
-    elsif symlinktarget != @symlink_target
-      EventMachine::next_tick do
-        @logger.debug "Symlink target changed. Reopening..."
-        @watch.stop_watching
-        open # Reopen if the inode has changed
-        watch { |what| notify(what) }
-      end
-    end
-
-  end # def eof
+  end # def handle_fstat
 
   def to_s
     return "#{self.class.name}(#{@path}) @ pos:#{@file.sysseek(0, IO::SEEK_CUR)}"
@@ -268,7 +347,7 @@ end # class EventMachine::FileTail
 # See also: EventMachine::FileTail#watch
 class EventMachine::FileTail::FileWatcher < EventMachine::FileWatch
   def initialize(block)
-    @logger = Logger.new(STDOUT)
+    @logger = Logger.new(STDERR)
     @logger.level = ($DEBUG and Logger::DEBUG or Logger::WARN)
     @callback = block
   end # def initialize
