@@ -35,6 +35,9 @@ class EventMachine::FileTail
 
   # The path of the file being tailed
   attr_reader :path
+
+  # The current file read position
+  attr_reader :position
   
   # Tail a file
   #
@@ -132,7 +135,7 @@ class EventMachine::FileTail
     end
 
     @naptime = 0;
-    @pos = 0
+    @position = 0
     schedule_next_read
   end
 
@@ -158,7 +161,7 @@ class EventMachine::FileTail
     begin
       data = @file.sysread(CHUNKSIZE)
       # Won't get here if sysread throws EOF
-      @pos += data.length
+      @position += data.length
       @naptime = 0
       receive_data(data)
       schedule_next_read
