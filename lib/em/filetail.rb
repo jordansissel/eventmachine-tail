@@ -89,13 +89,13 @@ class EventMachine::FileTail
     EventMachine::next_tick do
       open
       if (startpos == -1)
-        @file.sysseek(0, IO::SEEK_END)
+        @position = @file.sysseek(0, IO::SEEK_END)
         # TODO(sissel): if we don't have inotify or kqueue, should we
         # schedule a next read, here?
         # Is there a race condition between setting the file position and
         # watching given the two together are not atomic?
       else
-        @file.sysseek(startpos, IO::SEEK_SET)
+        @position = @file.sysseek(startpos, IO::SEEK_SET)
         schedule_next_read
       end
       watch
@@ -331,13 +331,13 @@ class EventMachine::FileTail
     elsif (filestat.size < @filestat.size)
       # If the file size shrank, assume truncation and seek to the beginning.
       @logger.info("File likely truncated... #{path}")
-      @file.sysseek(0, IO::SEEK_SET)
+      @position = @file.sysseek(0, IO::SEEK_SET)
       schedule_next_read
     end
   end # def handle_fstat
 
   def to_s
-    return "#{self.class.name}(#{@path}) @ pos:#{@file.sysseek(0, IO::SEEK_CUR)}"
+    return "#{self.class.name}(#{@path}) @ pos:#{@position}"
   end # def to_s
 end # class EventMachine::FileTail
 
