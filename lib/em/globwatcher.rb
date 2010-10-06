@@ -171,20 +171,25 @@ end # class EventMachine::FileGlobWatch
 class EventMachine::FileGlobWatchTail < EventMachine::FileGlobWatch
   # Initialize a new file glob tail.
   #
-  # path should be a glob or file path.
-  # handler should be a module or subclass of EventMachine::FileTail
+  # * path - glob or file path (string)
+  # * handler - a module or subclass of EventMachine::FileTail
   #   See also EventMachine::file_tail
-  # interval is how often (seconds) the glob path should be scanned
-  # exclude is an array of Regexp (or anything with .match) for 
+  # * interval - how often (seconds) the glob path should be scanned
+  # * exclude - an array of Regexp (or anything with .match) for 
   #   excluding from things to tail
+  #
   # The remainder of arguments are passed to EventMachine::file_tail as
-  #   EventMachine::file_tail(path_found, handler, *args)
+  #   EventMachine::file_tail(path_found, handler, *args, &block)
   public
-  def initialize(path, handler=nil, interval=60, exclude=[], *args)
+  def initialize(path, handler=nil, interval=60, exclude=[], *args, &block)
     super(path, interval)
     @handler = handler
     @args = args
     @exclude = exclude
+
+    if block_given?
+      @handler = block
+    end
   end # def initialize
 
   public
@@ -200,7 +205,11 @@ class EventMachine::FileGlobWatchTail < EventMachine::FileGlobWatch
       end
       @logger.info "#{self.class}: Watching #{path}"
 
-      EventMachine::file_tail(path, @handler, *@args)
+      if @handler.is_a? Proc
+        EventMachine::file_tail(path, nil, *@args, &@handler)
+      else
+        EventMachine::file_tail(path, @handler, *@args)
+      end
     rescue Errno::EACCES => e
       file_error(path, e)
     rescue Errno::EISDIR => e
@@ -228,15 +237,21 @@ end # class EventMachine::FileGlobWatchHandler
 module EventMachine
   # Watch a glob and tail any files found.
   #
-  # 'glob' should be a string path or glob, such as /var/log/*.log
-  # handler must be a module or subclass of EventMachine::FileGlobWatchTail
+  # * glob - a string path or glob, such as /var/log/*.log
+  # * handler - a module or subclass of EventMachine::FileGlobWatchTail.
+  #   handler can be omitted if you give a block.
+  #
+  # If you give a block and omit the handler parameter, then the behavior
+  # is that your block is called for every line read from any file the same
+  # way EventMachine::file_tail does when called with a block.
+  #           
   #   See EventMachine::FileGlobWatchTail for the callback methods.
-  def self.glob_tail(glob, handler=nil, *args)
-    handler = EventMachine::FileGlobWatch if handler == nil
+  #   See EventMachine::file_tail for more information about block behavior.
+  def self.glob_tail(glob, handler=nil, *args, &block)
+    handler = EventMachine::FileGlobWatchTail if handler == nil
     args.unshift(glob)
     klass = klass_from_handler(EventMachine::FileGlobWatchTail, handler, *args)
-    c = klass.new(*args)
-    yield c if block_given?
+    c = klass.new(*args, &block)
     return c
   end 
 
