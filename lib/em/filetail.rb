@@ -154,7 +154,10 @@ class EventMachine::FileTail
       @reopen_on_eof = true
       schedule_next_read
     elsif status == :unbind
-      # Do what?
+      # :unbind is called after the :deleted handler
+      # :deleted happens on FreeBSD's newsyslog instead of :moved
+      # clean up @watch since its reference is wiped in EM's file_deleted callback
+      @watch = nil
     end
   end # def notify
 
