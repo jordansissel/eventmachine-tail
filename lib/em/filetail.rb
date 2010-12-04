@@ -13,6 +13,13 @@ EventMachine.kqueue = true if EventMachine.kqueue?
 #     def receive_data(data)
 #       puts "Got #{data.length} bytes"
 #     end
+#
+#     # Optional
+#     def eof
+#       puts "Got EOF!"
+#       # If you want to stop
+#       stop
+#     end
 #   end
 #
 #   # Now add it to EM
@@ -131,6 +138,10 @@ class EventMachine::FileTail
         "module?")
     end
   end # def receive_data
+
+  public
+  def eof
+  end # def eof
 
   # notify is invoked by EM::watch_file when the file you are tailing has been
   # modified or otherwise needs to be acted on.
