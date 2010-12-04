@@ -28,9 +28,17 @@ class Reader < EventMachine::FileTail
       expected = @data.shift
       @testobj.assert_equal(expected, line, 
           "Expected '#{expected}' on line #{@lineno}, but got '#{line}'")
-      @testobj.finish if @data.length == 0
     end # @buffer.extract
   end # def receive_data
+  
+  # This effectively tests EOF handling by requiring it to work in order
+  # for the tests to pass.
+  def eof
+    if @data.length == 0
+      close
+      @testobj.finish
+    end
+  end # def eof
 end # class Reader
 
 class TestFileTail < Test::Unit::TestCase

@@ -71,7 +71,7 @@ class EventMachine::FileTail
     @logger.debug("Tailing #{path} starting at position #{startpos}")
 
     @file = nil
-    @want_eof = false
+    @want_eof_handling = false
     @want_read = false
     @want_reopen = false
     @reopen_on_eof = false
@@ -139,8 +139,14 @@ class EventMachine::FileTail
     end
   end # def receive_data
 
+  # This method is called when a tailed file reaches EOF.
+  #
+  # If you want to stop reading this file, call close(), otherwise
+  # this eof is handled as normal tailing does. The default
+  # EOF handler is to do nothing.
   public
   def eof
+    # do nothing, subclassers should implement this.
   end # def eof
 
   # notify is invoked by EM::watch_file when the file you are tailing has been
@@ -155,13 +161,17 @@ class EventMachine::FileTail
       @reopen_on_eof = true
       schedule_next_read
     elsif status == :unbind
-      # Do what?
+      # :unbind is called after the :deleted handler
+      # :deleted happens on FreeBSD's newsyslog instead of :moved
+      # clean up @watch since its reference is wiped in EM's file_deleted callback
+      @watch = nil
     end
   end # def notify
 
   # Open (or reopen, if necessary) our file and schedule a read.
   private
   def open
+    return if @closed
     @file.close if @file
     begin
       @logger.debug "Opening file #{@path}"
@@ -175,6 +185,15 @@ class EventMachine::FileTail
     @position = 0
     schedule_next_read
   end # def open
+
+  # Close this filetail
+  public
+  def close
+    @closed = true
+    EM.schedule do
+      @file.close if @file
+    end
+  end # def close
 
   # Watch our file.
   private
@@ -224,6 +243,7 @@ class EventMachine::FileTail
   # Read CHUNKSIZE from our file and pass it to .receive_data()
   private
   def read
+    return if @closed
     @logger.debug "#{self}: Reading..."
     begin
       data = @file.sysread(CHUNKSIZE)
@@ -238,17 +258,18 @@ class EventMachine::FileTail
     rescue EOFError
       schedule_eof
     end
-  end
+  end # def read
 
   # Do EOF handling on next EM iteration
+  private
   def schedule_eof
-    if !@want_eof
-      @want_eof = true
+    if !@want_eof_handling
+      eof # Call our own eof event
+      @want_eof_handling = true
       EventMachine::next_tick do
-        @want_eof = false
-        eof
+        handle_eof
       end # EventMachine::next_tick
-    end # if !@want_eof
+    end # if !@want_eof_handling
   end # def schedule_eof
 
   private
@@ -263,8 +284,8 @@ class EventMachine::FileTail
   end # def schedule_reopen
 
   private
-  def eof
-    @want_eof = false
+  def handle_eof
+    @want_eof_handling = false
 
     if @reopen_on_eof
       @reopen_on_eof = false
@@ -295,7 +316,7 @@ class EventMachine::FileTail
         end # begin/rescue ENOENT
       end # EM::PeriodicTimer
     end # begin/rescue ENOENT
-  end # def eof
+  end # def handle_eof
 
   private
   def read_file_metadata(&block)
