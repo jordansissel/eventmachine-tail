@@ -75,7 +75,7 @@ class EventMachine::FileGlobWatch
   # to work with EventMachine::watch_glob
   public
   def file_deleted(path)
-    raise NotImplementedError.new("#{self.class.name}#file_found is not "\
+    raise NotImplementedError.new("#{self.class.name}#file_deleted is not "\
       "implemented. Did you forget to implement this in your subclass or "\
       "module?")
   end # def file_found
