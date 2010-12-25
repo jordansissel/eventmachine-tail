@@ -85,7 +85,7 @@ class EventMachine::FileTail
     read_file_metadata
 
     if @filestat.directory?
-      raise Errno::EISDIR.new(@path)
+      on_exception Errno::EISDIR.new(@path)
     end
 
     if block_given?
@@ -133,11 +133,16 @@ class EventMachine::FileTail
         @handler.call(self, line)
       end
     else
-      raise NotImplementedError.new("#{self.class.name}#receive_data is not "\
+      on_exception NotImplementedError.new("#{self.class.name}#receive_data is not "\
         "implemented. Did you forget to implement this in your subclass or "\
         "module?")
     end
   end # def receive_data
+
+  def on_exception(exception)
+    @logger.error("Exception raised. Using default handler in #{self.class.name}")
+    raise exception
+  end
 
   # This method is called when a tailed file reaches EOF.
   #
@@ -146,6 +151,7 @@ class EventMachine::FileTail
   # EOF handler is to do nothing.
   public
   def eof
+    puts "EOF"
     # do nothing, subclassers should implement this.
   end # def eof
 
@@ -153,7 +159,7 @@ class EventMachine::FileTail
   # modified or otherwise needs to be acted on.
   private
   def notify(status)
-    @logger.debug("notify: #{status} on #{path}")
+    @logger.warn("notify: #{status} on #{path}")
     if status == :modified
       schedule_next_read
     elsif status == :moved
@@ -177,11 +183,12 @@ class EventMachine::FileTail
       @logger.debug "Opening file #{@path}"
       @file = File.open(@path, "r")
     rescue Errno::ENOENT => e
-      @logger.debug("File not found: '#{@path}' (#{e})")
-      raise e
+      @logger.info("File not found: '#{@path}' (#{e})")
+      on_exception(e)
     end
 
     @naptime = 0
+    puts "EOF"
     @position = 0
     schedule_next_read
   end # def open
@@ -320,7 +327,12 @@ class EventMachine::FileTail
 
   private
   def read_file_metadata(&block)
-    filestat = File.stat(@path)
+    begin
+      filestat = File.stat(@path)
+    rescue => e
+      @logger.debug("File stat on '#{@path}' failed")
+      on_exception e
+    end
     symlink_stat = nil
     symlink_target = nil
 
