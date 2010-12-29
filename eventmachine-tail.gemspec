@@ -17,6 +17,9 @@ Gem::Specification.new do |spec|
   spec.bindir = "bin"
   spec.executables << "rtail"
 
+  # Add 'emtail' since 'rtail' conflicts with gem 'file-tail' rtail
+  spec.executables << "emtail"
+
   spec.author = "Jordan Sissel"
   spec.email = "jls@semicomplete.com"
   spec.homepage = "http://code.google.com/p/semicomplete/wiki/EventMachineTail"

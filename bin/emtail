@@ -1,0 +1,83 @@
+#!/usr/bin/env ruby
+require "rubygems"
+require "eventmachine"
+require "eventmachine-tail"
+require "optparse"
+
+class Reader < EventMachine::FileTail
+  def initialize(path, startpos=-1, with_filenames=true)
+    super(path, startpos)
+    @buffer = BufferedTokenizer.new
+    @with_filenames = with_filenames
+  end
+
+  def receive_data(data)
+    @buffer.extract(data).each do |line|
+      if @with_filenames # global flag, see the '-n' option
+        puts "#{path}: #{line}"
+      else
+        puts line
+      end # if @with_filenames
+    end # buffer extract
+  end # def receive_data
+end # class Reader
+
+def pattern_to_regexp(pattern)
+  pattern.gsub!(".", "\\.") # fix literal .
+  pattern.gsub!("*", ".+")  # * becomes .+
+  pattern.gsub!("?", ".")   # ? becomes .
+  return Regexp.new(pattern)
+end # def pattern_to_regexp
+
+def main(args)
+  with_filenames = true
+  globcheck_interval = 5
+  exclude_patterns = []
+
+  opts = OptionParser.new do |opts|
+    opts.banner = "Usage: #{$0} [options] <path_or_glob> [path_or_glob2] [...]"
+
+    opts.on("-n", "--no-filename", 
+            "Supress prefixing of output with file names") do |x|
+      with_filenames = false
+    end # -n
+    
+    opts.on("-i SECONDS", "--check-interval SECONDS",
+            "How frequently, in seconds, to check the glob patterns" \
+            "for new files") do |x|
+      globcheck_interval = x.to_f
+    end # -i SECONDS
+
+    opts.on("-x EXCLUDE", "--exclude EXCLUDE",
+            "A pattern to ignore. Wildcard/globs accepted." \
+            " Can be specified multiple times") do |pattern|
+      exclude_patterns << pattern_to_regexp(pattern)
+    end
+  end # OptionParser
+
+  opts.parse!(args)
+
+  if args.length == 0
+    puts opts.banner
+    return 1
+  end
+
+  EventMachine.run do
+    Signal.trap("INT") do
+      EventMachine.schedule do
+        $stderr.puts "Got SIGINT"
+        exit 128 + (Signal.list["INT"])
+      end
+    end
+
+    args.each do |path|
+      EventMachine::FileGlobWatchTail.new(path, Reader,
+                                          interval = globcheck_interval,
+                                          exclude = exclude_patterns,
+                                          start_pos = -1,
+                                          with_filenames = with_filenames)
+    end # args.each
+  end # EventMachine.run
+end # def main
+
+exit(main(ARGV))
