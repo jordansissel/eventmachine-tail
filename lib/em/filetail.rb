@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require "eventmachine"
+require "em/watch_file_channel"
 require "logger"
 
 EventMachine.epoll if EventMachine.epoll?
@@ -210,7 +211,7 @@ class EventMachine::FileTail
 
     @logger.debug "Starting watch on #{@path}"
     callback = proc { |what| notify(what) }
-    @watch = EventMachine::watch_file(@path, EventMachine::FileTail::FileWatcher, callback)
+    @watch = EventMachine::watch_file_channel(@path, EventMachine::FileTail::FileWatcher, callback)
     watch_symlink if @symlink_target
   end # def watch
 
