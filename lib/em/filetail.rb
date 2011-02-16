@@ -38,6 +38,8 @@ class EventMachine::FileTail
   CHUNKSIZE = 65536 
 
   #MAXSLEEP = 2
+  
+  FORCE_ENCODING = !! (defined? Encoding)
 
   # The path of the file being tailed
   attr_reader :path
@@ -254,6 +256,7 @@ class EventMachine::FileTail
     @logger.debug "#{self}: Reading..."
     begin
       data = @file.sysread(CHUNKSIZE)
+      data.force_encoding(@file.external_encoding) if FORCE_ENCODING
 
       # Won't get here if sysread throws EOF
       @position += data.length

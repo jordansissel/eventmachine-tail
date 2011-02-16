@@ -208,5 +208,25 @@ class TestFileTail < Test::Unit::TestCase
       File.delete(f.path)
     end
   end # def test_filetail_tracks_renames
+  
+  def test_encoding
+    return if RUBY_VERSION < '1.9.0'
+    tmp = Tempfile.new("testfiletail")
+    data = DATA.clone
+    EM.run do
+      abort_after_timeout(1)
+
+      EM::file_tail(tmp.path) do |filetail, line|
+        assert_equal(Encoding.default_external, line.encoding, 
+                     "Expected the read data to have the encoding specified in Encoding.default_external (#{Encoding.default_external}, but was #{line.encoding})")
+        finish
+      end
+
+      EM.next_tick do
+        tmp.puts(data.shift)
+        tmp.flush
+      end
+    end # EM.run
+  end # def test_encoding
 end # class TestFileTail
 
