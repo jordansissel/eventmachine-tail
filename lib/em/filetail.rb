@@ -161,7 +161,7 @@ class EventMachine::FileTail
   # modified or otherwise needs to be acted on.
   private
   def notify(status)
-    @logger.warn("notify: #{status} on #{path}")
+    @logger.debug { "notify: #{status} on #{path}" }
     if status == :modified
       schedule_next_read
     elsif status == :moved
