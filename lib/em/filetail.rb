@@ -38,6 +38,8 @@ class EventMachine::FileTail
   CHUNKSIZE = 65536 
 
   #MAXSLEEP = 2
+  
+  FORCE_ENCODING = !! (defined? Encoding)
 
   # The path of the file being tailed
   attr_reader :path
@@ -151,7 +153,7 @@ class EventMachine::FileTail
   # EOF handler is to do nothing.
   public
   def eof
-    puts "EOF"
+    @logger.debug { 'EOF' }
     # do nothing, subclassers should implement this.
   end # def eof
 
@@ -159,7 +161,7 @@ class EventMachine::FileTail
   # modified or otherwise needs to be acted on.
   private
   def notify(status)
-    @logger.warn("notify: #{status} on #{path}")
+    @logger.debug { "notify: #{status} on #{path}" }
     if status == :modified
       schedule_next_read
     elsif status == :moved
@@ -179,6 +181,7 @@ class EventMachine::FileTail
   def open
     return if @closed
     @file.close if @file
+    return unless File.exists?(@path)
     begin
       @logger.debug "Opening file #{@path}"
       @file = File.open(@path, "r")
@@ -188,7 +191,7 @@ class EventMachine::FileTail
     end
 
     @naptime = 0
-    puts "EOF"
+    @logger.debug { 'EOF' }
     @position = 0
     schedule_next_read
   end # def open
@@ -207,6 +210,7 @@ class EventMachine::FileTail
   def watch
     @watch.stop_watching if @watch
     @symlink_timer.cancel if @symlink_timer
+    return unless File.exists?(@path)
 
     @logger.debug "Starting watch on #{@path}"
     callback = proc { |what| notify(what) }
@@ -254,6 +258,7 @@ class EventMachine::FileTail
     @logger.debug "#{self}: Reading..."
     begin
       data = @file.sysread(CHUNKSIZE)
+      data.force_encoding(@file.external_encoding) if FORCE_ENCODING
 
       # Won't get here if sysread throws EOF
       @position += data.length
