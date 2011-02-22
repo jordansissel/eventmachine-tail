@@ -153,7 +153,7 @@ class EventMachine::FileTail
   # EOF handler is to do nothing.
   public
   def eof
-    puts "EOF"
+    @logger.debug { 'EOF' }
     # do nothing, subclassers should implement this.
   end # def eof
 
@@ -191,7 +191,7 @@ class EventMachine::FileTail
     end
 
     @naptime = 0
-    puts "EOF"
+    @logger.debug { 'EOF' }
     @position = 0
     schedule_next_read
   end # def open
