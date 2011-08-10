@@ -180,7 +180,7 @@ class EventMachine::FileTail
   private
   def open
     return if @closed
-    @file.close if @file
+    @file.close if @file && !@file.closed?
     return unless File.exists?(@path)
     begin
       @logger.debug "Opening file #{@path}"
@@ -255,21 +255,25 @@ class EventMachine::FileTail
   private
   def read
     return if @closed
+
+    data = nil
     @logger.debug "#{self}: Reading..."
     begin
       data = @file.sysread(CHUNKSIZE)
-      data.force_encoding(@file.external_encoding) if FORCE_ENCODING
-
-      # Won't get here if sysread throws EOF
-      @position += data.length
-      @naptime = 0
-
-      # Subclasses should implement receive_data
-      receive_data(data)
-      schedule_next_read
-    rescue EOFError
+    rescue EOFError, IOError
       schedule_eof
+      return
     end
+
+    data.force_encoding(@file.external_encoding) if FORCE_ENCODING
+
+    # Won't get here if sysread throws EOF
+    @position += data.length
+    @naptime = 0
+
+    # Subclasses should implement receive_data
+    receive_data(data)
+    schedule_next_read
   end # def read
 
   # Do EOF handling on next EM iteration
