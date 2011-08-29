@@ -44,7 +44,7 @@ class EventMachine::FileGlobWatch
   end # def initialize
   
   # This method may be called to stop watching
-  #
+  # TODO(sissel): make 'stop' stop all active watches, too?
   public
   def stop
     @find_files_interval.cancel if @find_files_interval
