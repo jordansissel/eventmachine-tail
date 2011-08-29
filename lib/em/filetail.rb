@@ -46,6 +46,9 @@ class EventMachine::FileTail
 
   # The current file read position
   attr_reader :position
+  
+  # If this tail is closed
+  attr_reader :closed
 
   # Check interval when checking symlinks for changes. This is only useful
   # when you are actually tailing symlinks.
@@ -201,10 +204,18 @@ class EventMachine::FileTail
   def close
     @closed = true
     EM.schedule do
+      @watch.stop_watching if @watch
+      @symlink_timer.cancel if @symlink_timer
       @file.close if @file
     end
   end # def close
-
+  
+  # More rubyesque way of checking if this tail is closed
+  public
+  def closed?
+    @closed
+  end
+  
   # Watch our file.
   private
   def watch
