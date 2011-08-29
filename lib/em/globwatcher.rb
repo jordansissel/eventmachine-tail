@@ -39,7 +39,7 @@ class EventMachine::FileGlobWatch
     @watches = Hash.new
     @logger = Logger.new(STDOUT)
     @logger.level = ($DEBUG and Logger::DEBUG or Logger::WARN)
-
+    @interval = interval
     start
   end # def initialize
   
@@ -62,7 +62,7 @@ class EventMachine::FileGlobWatch
     # files.
     EM.next_tick do
       find_files
-      @find_files_interval = EM.add_periodic_timer(interval) do
+      @find_files_interval = EM.add_periodic_timer(@interval) do
         find_files
       end
     end # EM.next_tick
