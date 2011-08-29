@@ -208,7 +208,7 @@ class EventMachine::FileTail
     @want_read = false
     EM.schedule do
       @watch.stop_watching if @watch
-      @read_timer.cancel if @read_timer
+      EventMachine::cancel_timer(@read_timer) if @read_timer
       @symlink_timer.cancel if @symlink_timer
       @missing_file_check_timer.cancel if @missing_file_check_timer
       @file.close if @file
