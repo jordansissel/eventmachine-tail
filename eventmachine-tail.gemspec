@@ -6,7 +6,7 @@ Gem::Specification.new do |spec|
   end
 
   spec.name = "eventmachine-tail"
-  spec.version = "0.6.2"
+  spec.version = "0.6.3"
   spec.summary = "eventmachine tail - a file tail implementation with glob support"
   spec.description = "Add file 'tail' implemented with EventMachine. Also includes a 'glob watch' class for watching a directory pattern for new matches, like /var/log/*.log"
   spec.add_dependency("eventmachine")
