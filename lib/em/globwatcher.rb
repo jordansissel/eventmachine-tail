@@ -39,7 +39,21 @@ class EventMachine::FileGlobWatch
     @watches = Hash.new
     @logger = Logger.new(STDOUT)
     @logger.level = ($DEBUG and Logger::DEBUG or Logger::WARN)
-
+    @interval = interval
+    start
+  end # def initialize
+  
+  # This method may be called to stop watching
+  #
+  public
+  def stop
+    @find_files_interval.cancel if @find_files_interval
+  end
+  
+  # This method may be called to start watching
+  #
+  public
+  def start
     # We periodically check here because it is easier than writing our own glob
     # parser (so we can smartly watch globs like /foo/*/bar*/*.log)
     #
@@ -48,12 +62,12 @@ class EventMachine::FileGlobWatch
     # files.
     EM.next_tick do
       find_files
-      EM.add_periodic_timer(interval) do
+      @find_files_interval = EM.add_periodic_timer(@interval) do
         find_files
       end
     end # EM.next_tick
-  end # def initialize
-
+  end
+  
   # This method is called when a new file is found
   #
   # * path - the string path of the file found
