@@ -46,6 +46,9 @@ class EventMachine::FileTail
 
   # The current file read position
   attr_reader :position
+  
+  # If this tail is closed
+  attr_reader :closed
 
   # Check interval when checking symlinks for changes. This is only useful
   # when you are actually tailing symlinks.
@@ -78,6 +81,8 @@ class EventMachine::FileTail
     @want_reopen = false
     @reopen_on_eof = false
     @symlink_timer = nil
+    @missing_file_check_timer = nil
+    @read_timer = nil
     @symlink_target = nil
     @symlink_stat = nil
 
@@ -200,11 +205,22 @@ class EventMachine::FileTail
   public
   def close
     @closed = true
+    @want_read = false
     EM.schedule do
+      @watch.stop_watching if @watch
+      EventMachine::cancel_timer(@read_timer) if @read_timer
+      @symlink_timer.cancel if @symlink_timer
+      @missing_file_check_timer.cancel if @missing_file_check_timer
       @file.close if @file
     end
   end # def close
-
+  
+  # More rubyesque way of checking if this tail is closed
+  public
+  def closed?
+    @closed
+  end
+  
   # Watch our file.
   private
   def watch
@@ -244,7 +260,7 @@ class EventMachine::FileTail
   def schedule_next_read
     if !@want_read
       @want_read = true
-      EventMachine::add_timer(@naptime) do
+      @read_timer = EventMachine::add_timer(@naptime) do
         @want_read = false
         read
       end
@@ -319,12 +335,12 @@ class EventMachine::FileTail
     rescue Errno::ENOENT
         # The file disappeared. Wait for it to reappear.
         # This can happen if it was deleted or moved during log rotation.
-      timer = EM::PeriodicTimer.new(@missing_file_check_interval) do
+      @missing_file_check_timer = EM::PeriodicTimer.new(@missing_file_check_interval) do
         begin
           read_file_metadata do |filestat, linkstat, linktarget|
             handle_fstat(filestat, linkstat, linktarget)
           end
-          timer.cancel
+          @missing_file_check_timer.cancel
         rescue Errno::ENOENT
           # The file disappeared. Wait for it to reappear.
           # This can happen if it was deleted or moved during log rotation.
