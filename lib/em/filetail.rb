@@ -354,6 +354,8 @@ class EventMachine::FileTail
   def read_file_metadata(&block)
     begin
       filestat = File.stat(@path)
+    rescue Errno::ENOENT
+      raise
     rescue => e
       @logger.debug("File stat on '#{@path}' failed")
       on_exception e
