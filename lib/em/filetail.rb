@@ -35,10 +35,10 @@ EventMachine.kqueue = true if EventMachine.kqueue?
 # See also: EventMachine::FileTail#receive_data
 class EventMachine::FileTail
   # Maximum size to read at a time from a single file.
-  CHUNKSIZE = 65536 
+  CHUNKSIZE = 65536
 
   #MAXSLEEP = 2
-  
+
   FORCE_ENCODING = !! (defined? Encoding)
 
   # The path of the file being tailed
@@ -46,7 +46,7 @@ class EventMachine::FileTail
 
   # The current file read position
   attr_reader :position
-  
+
   # If this tail is closed
   attr_reader :closed
 
@@ -57,11 +57,11 @@ class EventMachine::FileTail
   # Check interval for looking for a file if we are tailing it and it has
   # gone missing.
   attr_accessor :missing_file_check_interval
-  
+
   # Tail a file
   #
   # * path is a string file path to tail
-  # * startpos is an offset to start tailing the file at. If -1, start at end of 
+  # * startpos is an offset to start tailing the file at. If -1, start at end of
   # file.
   #
   # If you want debug messages, run ruby with '-d' or set $DEBUG
@@ -102,6 +102,8 @@ class EventMachine::FileTail
 
     EventMachine::next_tick do
       open
+      next unless @file
+
       if (startpos == -1)
         @position = @file.sysseek(0, IO::SEEK_END)
         # TODO(sissel): if we don't have inotify or kqueue, should we
@@ -116,7 +118,7 @@ class EventMachine::FileTail
     end # EventMachine::next_tick
   end # def initialize
 
-  # This method is called when a tailed file has data read. 
+  # This method is called when a tailed file has data read.
   #
   # * data - string data read from the file.
   #
@@ -132,7 +134,7 @@ class EventMachine::FileTail
   #       @buffer.extract(data).each do |line|
   #         # do something with 'line'
   #       end
-  #     end  
+  #     end
   public
   def receive_data(data)
     if @handler # FileTail.new called with a block
@@ -214,13 +216,13 @@ class EventMachine::FileTail
       @file.close if @file
     end
   end # def close
-  
+
   # More rubyesque way of checking if this tail is closed
   public
   def closed?
     @closed
   end
-  
+
   # Watch our file.
   private
   def watch
@@ -393,7 +395,7 @@ class EventMachine::FileTail
         @logger.debug "Symlink target changed. Reopening..."
         @reopen_on_eof = true
         schedule_next_read
-      end 
+      end
     elsif (filestat.ino != @filestat.ino or filestat.rdev != @filestat.rdev)
       @logger.debug "Inode or device changed. Reopening..."
       @logger.debug filestat
