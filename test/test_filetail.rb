@@ -26,11 +26,11 @@ class Reader < EventMachine::FileTail
     @buffer.extract(data).each do |line|
       @lineno += 1
       expected = @data.shift
-      @testobj.assert_equal(expected, line, 
+      @testobj.assert_equal(expected, line,
           "Expected '#{expected}' on line #{@lineno}, but got '#{line}'")
     end # @buffer.extract
   end # def receive_data
-  
+
   # This effectively tests EOF handling by requiring it to work in order
   # for the tests to pass.
   def eof
@@ -63,6 +63,23 @@ class TestFileTail < Test::Unit::TestCase
     end # EM.run
   end # def test_filetail
 
+  def test_filetail_close
+    tmp = Tempfile.new("testfiletail")
+    data = DATA.clone
+    data.each { |i| tmp.puts i }
+    tmp.flush
+
+    EM.run do
+      abort_after_timeout(2)
+
+      ft = EM::file_tail(tmp.path, Reader, -1, self)
+      ft.close
+      timer = EM::PeriodicTimer.new(0.2) do
+        timer.cancel and finish if ft.closed?
+      end
+    end # EM.run
+  end # def test_filetail_close
+
   def test_filetail_with_seek
     tmp = Tempfile.new("testfiletail")
     data = DATA.clone
@@ -86,7 +103,7 @@ class TestFileTail < Test::Unit::TestCase
       EM::file_tail(tmp.path) do |filetail, line|
         lineno += 1
         expected = data.shift
-        assert_equal(expected, line, 
+        assert_equal(expected, line,
                      "Expected '#{expected}' on line #{@lineno}, but got '#{line}'")
         finish if data.length == 0
       end
@@ -120,7 +137,7 @@ class TestFileTail < Test::Unit::TestCase
         lineno += 1
         expected = data.shift
         #puts "Got #{lineno}: #{line}"
-        assert_equal(expected, line, 
+        assert_equal(expected, line,
                      "Expected '#{expected}' on line #{lineno}, but got '#{line}'")
         finish if data.length == 0
 
@@ -176,7 +193,7 @@ class TestFileTail < Test::Unit::TestCase
         lineno += 1
         expected = data.shift
         puts "Got #{lineno}: #{line}" if $debug
-        assert_equal(expected, line, 
+        assert_equal(expected, line,
                      "Expected '#{expected}' on line #{lineno}, but got '#{line}'")
         finish if data.length == 0
 
@@ -208,7 +225,7 @@ class TestFileTail < Test::Unit::TestCase
       File.delete(f.path)
     end
   end # def test_filetail_tracks_renames
-  
+
   def test_encoding
     return if RUBY_VERSION < '1.9.0'
     tmp = Tempfile.new("testfiletail")
@@ -217,7 +234,7 @@ class TestFileTail < Test::Unit::TestCase
       abort_after_timeout(1)
 
       EM::file_tail(tmp.path) do |filetail, line|
-        assert_equal(Encoding.default_external, line.encoding, 
+        assert_equal(Encoding.default_external, line.encoding,
                      "Expected the read data to have the encoding specified in Encoding.default_external (#{Encoding.default_external}, but was #{line.encoding})")
         finish
       end
