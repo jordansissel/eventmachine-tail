@@ -173,7 +173,6 @@ class EventMachine::FileTail
       schedule_next_read
     elsif status == :moved
       # read to EOF, then reopen.
-      @reopen_on_eof = true
       schedule_next_read
     elsif status == :unbind
       # :unbind is called after the :deleted handler
