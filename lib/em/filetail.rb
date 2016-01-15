@@ -356,18 +356,18 @@ class EventMachine::FileTail
   def read_file_metadata(&block)
     begin
       filestat = File.stat(@path)
+      symlink_stat = nil
+      symlink_target = nil
+
+      if filestat.symlink?
+        symlink_stat = File.lstat(@path) rescue nil
+        symlink_target = File.readlink(@path) rescue nil
+      end
     rescue Errno::ENOENT
       raise
     rescue => e
       @logger.debug("File stat on '#{@path}' failed")
       on_exception e
-    end
-    symlink_stat = nil
-    symlink_target = nil
-
-    if File.symlink?(@path)
-      symlink_stat = File.lstat(@path) rescue nil
-      symlink_target = File.readlink(@path) rescue nil
     end
 
     if block_given?
