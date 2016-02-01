@@ -81,6 +81,15 @@ class EventMachine::FileGlobWatch
       "module?")
   end # def file_found
 
+  # This method is called when a file is modified.
+  #
+  # * path - The string path of the file modified
+  #
+  # You AREN'T required to implement this in your sublcass or module
+  public
+  def file_modified(path)
+  end
+
   # This method is called when a file is deleted.
   #
   # * path - the string path of the file deleted
@@ -104,7 +113,10 @@ class EventMachine::FileGlobWatch
       fileinfo = FileInfo.new(path) rescue next
       # Skip files that have the same inode (renamed or hardlinked)
       known_files.delete(fileinfo.stat.ino)
-      next if @files.include?(fileinfo.stat.ino)
+      if @files.include?(fileinfo.stat.ino)
+        next unless modified(fileinfo)
+        file_modified(path)
+      end
 
       track(fileinfo)
       file_found(path)
@@ -143,6 +155,11 @@ class EventMachine::FileGlobWatch
       #@logger.warn(e)
     #end
   end # def watch
+
+  # Tells if a file has been modified since last time
+  def modified(fileinfo)
+    not @files[fileinfo.stat.ino].stat.mtime == fileinfo.stat.mtime
+  end
 
   private
   class FileWatcher < EventMachine::FileWatch

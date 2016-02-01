@@ -16,6 +16,10 @@ class Watcher < EventMachine::FileGlobWatch
   def file_found(path)
     puts "Found: #{path}"
   end
+
+  def file_modified(path)
+    puts "Modified: #{path}"
+  end
 end # class Watcher
 
 EM.run do

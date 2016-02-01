@@ -32,6 +32,26 @@ class Watcher < EventMachine::FileGlobWatch
   end
 end # class Reader
 
+class ModificationWatcher < EventMachine::FileGlobWatch
+  def initialize(path, interval, data, testobj)
+    super(path, interval)
+    @data = data
+    @testobj = testobj
+  end # def initialize
+
+  def file_found(path)
+  end
+
+  def file_deleted(patH)
+  end
+
+  def file_modified(path)
+    @testobj.assert(@data.include?(path), "Expected #{path} in \n#{@data.join("\n")}")
+    @data.delete(path)
+    @testobj.finish if @data.length == 0
+  end
+end # class ModificationWatcher
+
 class TestGlobWatcher < Test::Unit::TestCase
   include EventMachineTailTestHelpers
   SLEEPMAX = 1
@@ -142,5 +162,29 @@ class TestGlobWatcher < Test::Unit::TestCase
       end
     end
   end # def test_glob_ignores_file_renames
+
+  def test_glob_finds_modified_files_at_runtime
+    EM.run do
+      abort_after_timeout(SLEEPMAX * @data.length + 10)
+
+      datacopy = @data.clone
+
+      # To test if file edit is detected, file must exist first
+      datacopy.each do |filename|
+        File.new(filename, "w").close
+      end
+
+      EM::watch_glob("#{@dir}/*", ModificationWatcher, @watchinterval, @data.clone, self)
+
+      sleep(2) # Modification time resolution is 1 second, so we need to allow mtimes to change
+      timer = EM::PeriodicTimer.new(0.2) do
+        File.open(datacopy.shift, "w") do |f|
+          f.puts("LOLCAT!")
+        end
+        sleep(rand * SLEEPMAX)
+        timer.cancel if datacopy.length == 0
+      end
+    end # EM.run
+  end # def test_glob_finds_modified_files_at_runtime
 end # class TestGlobWatcher
 
