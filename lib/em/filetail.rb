@@ -187,7 +187,7 @@ class EventMachine::FileTail
   def open
     return if @closed
     @file.close if @file && !@file.closed?
-    return unless File.exists?(@path)
+    return unless File.exist?(@path)
     begin
       @logger.debug "Opening file #{@path}"
       @file = File.open(@path, "r")
@@ -227,7 +227,7 @@ class EventMachine::FileTail
   def watch
     @watch.stop_watching if @watch
     @symlink_timer.cancel if @symlink_timer
-    return unless File.exists?(@path)
+    return unless File.exist?(@path)
 
     @logger.debug "Starting watch on #{@path}"
     callback = proc { |what| notify(what) }
